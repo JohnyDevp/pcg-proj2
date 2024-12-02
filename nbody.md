@@ -1,5 +1,5 @@
 # PCG projekt 2
-- autor: xlogin00
+- autor: xholan11
 
 ## Měření výkonu (čas / 100 kroků simulace)
 
