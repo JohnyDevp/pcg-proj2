@@ -163,9 +163,6 @@ void calculateCollisionVelocity(Particles &p, Velocities &tmpVel, const unsigned
   for (unsigned i = 0u; i < N; ++i)
   {
     float3 newVel = {0, 0, 0};
-    float4 *const pPos = p.pos;
-    float3 *const pVel = p.vel;
-    float3 *const tVel = tmpVel.vel;
 
     float4 currentPos = p.pos[i];
     float3 currentVel = p.vel[i];
@@ -177,16 +174,15 @@ void calculateCollisionVelocity(Particles &p, Velocities &tmpVel, const unsigned
 
       const float4 d = otherPos - currentPos;
       const float r = d.abs();
-      const float weight_diff = (2.f * otherPos.w) / (currentPos.w - otherPos.w);
 
       newVel.x += (r > 0.f && r < COLLISION_DISTANCE)
-                      ? (otherVel.x * weight_diff)
+                      ? ((((currentPos.w - otherPos.w) * currentVel.x + 2.f * otherPos.w * otherVel.x) / (currentPos.w + otherPos.w)) - currentVel.x)
                       : 0.f;
       newVel.y += (r > 0.f && r < COLLISION_DISTANCE)
-                      ? (otherVel.y * weight_diff)
+                      ? ((((currentPos.w - otherPos.w) * currentVel.y + 2.f * otherPos.w * otherVel.y) / (currentPos.w + otherPos.w)) - currentVel.y)
                       : 0.f;
       newVel.z += (r > 0.f && r < COLLISION_DISTANCE)
-                      ? (otherVel.z * weight_diff)
+                      ? ((((currentPos.w - otherPos.w) * currentVel.z + 2.f * otherPos.w * otherVel.z) / (currentPos.w + otherPos.w)) - currentVel.z)
                       : 0.f;
     }
     tmpVel.vel[i] += newVel;

@@ -21,6 +21,10 @@
 #include "nbody.h"
 #include "h5Helper.h"
 
+void calculateGravitationVelocity(Particles &p, Particles &pOut, const unsigned N, float dt);
+void calculateCollisionVelocity(Particles &p, Particles &pOut, const unsigned N, float dt);
+void updateParticles(Particles &p, Particles &pOut, const unsigned N, float dt);
+
 /**
  * Main rotine
  * @param argc
@@ -93,7 +97,7 @@ int main(int argc, char **argv)
   /********************************************************************************************************************/
   /*                                     TODO: Memory transfer CPU -> GPU                                             */
   /********************************************************************************************************************/
-  particles[0].copyToDevice();
+  // particles[0].copyToDevice();
 
   
   // Start measurement
@@ -107,8 +111,10 @@ int main(int argc, char **argv)
     /******************************************************************************************************************/
     /*                                        TODO: GPU computation                                                   */
     /******************************************************************************************************************/
-
-
+    // calculateVelocity(particles[srcIdx], particles[dstIdx], N, dt);
+    calculateGravitationVelocity(particles[0], particles[1], N, dt);
+    calculateCollisionVelocity(particles[0], particles[1], N, dt);
+    updateParticles(particles[0], particles[1], N, dt);
   }
 
   const unsigned resIdx = steps % 2;    // result particles index
@@ -123,8 +129,8 @@ int main(int argc, char **argv)
   /********************************************************************************************************************/
   /*                                     TODO: Memory transfer GPU -> CPU                                             */
   /********************************************************************************************************************/
-  particles[resIdx].copyToHost();
-
+  // particles[0].copyToHost();
+  // particles[1].copyToHost();
 
   // Compute reference center of mass on CPU
   const float4 refCenterOfMass = centerOfMassRef(md);
