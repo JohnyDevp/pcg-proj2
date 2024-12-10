@@ -34,19 +34,19 @@ struct Particles
   Particles(const unsigned N);
 
   /// @brief Copy constructor not allowed
-  Particles(const Particles&) = delete;
+  Particles(const Particles &) = delete;
 
   /// @brief Move constructor not allowed
-  Particles(Particles&&) = delete;
+  Particles(Particles &&) = delete;
 
   /// @brief Destructor
   ~Particles();
 
   /// @brief Copy assignment operator not allowed
-  Particles& operator=(const Particles&) = delete;
+  Particles &operator=(const Particles &) = delete;
 
   /// @brief Move assignment operator not allowed
-  Particles& operator=(Particles&&) = delete;
+  Particles &operator=(Particles &&) = delete;
 
   /**
    * @brief Copy particles from host to device
@@ -61,8 +61,9 @@ struct Particles
   /********************************************************************************************************************/
   /* TODO: Particles data structure optimized for use on GPU. Use float3 and float4 structures defined in file Vec.h  */
   /********************************************************************************************************************/
-
-
+  float4 *pos;
+  float3 *vel;
+  int N;
 };
 
 /**
@@ -72,10 +73,10 @@ struct Particles
  * @param N    - Number of particles
  * @param dt   - Size of the time step
  */
-void calculateVelocity(Particles&     pIn,
-                       Particles&     pOut,
+void calculateVelocity(Particles &pIn,
+                       Particles &pOut,
                        const unsigned N,
-                       float          dt);
+                       float dt);
 
 /**
  * Calculate particles center of mass
@@ -84,14 +85,14 @@ void calculateVelocity(Particles&     pIn,
  * @param lock - pointer to a user-implemented lock
  * @param N    - Number of particles
  */
-void centerOfMass(Particles&     p,
-                  float4*        comBuffer,
+void centerOfMass(Particles &p,
+                  float4 *comBuffer,
                   const unsigned N);
 
 /**
  * CPU implementation of the Center of Mass calculation
  * @param memDesc - Memory descriptor of particle data on CPU side
  */
-float4 centerOfMassRef(MemDesc& memDesc);
+float4 centerOfMassRef(MemDesc &memDesc);
 
 #endif /* NBODY_H */

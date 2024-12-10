@@ -66,13 +66,13 @@ int main(int argc, char **argv)
    *       Data pointer       consecutive elements        element in FLOATS,
    *                          in FLOATS, not bytes            not bytes
   */
-  MemDesc md(nullptr,                 0,                          0,
-             nullptr,                 0,                          0,
-             nullptr,                 0,                          0,
-             nullptr,                 0,                          0,
-             nullptr,                 0,                          0,
-             nullptr,                 0,                          0,
-             nullptr,                 0,                          0,
+  MemDesc md(&particles[0].pos->x, 4, 0,
+             &particles[0].pos->y, 4, 0,
+             &particles[0].pos->z, 4, 0,
+             &particles[0].vel->x, 3, 0,
+             &particles[0].vel->y, 3, 0,
+             &particles[0].vel->z, 3, 0,
+             &particles[0].pos->w, 4, 0,
              N,
              recordsCount);
 
@@ -93,7 +93,7 @@ int main(int argc, char **argv)
   /********************************************************************************************************************/
   /*                                     TODO: Memory transfer CPU -> GPU                                             */
   /********************************************************************************************************************/
-
+  particles[0].copyToDevice();
 
   
   // Start measurement
@@ -123,7 +123,7 @@ int main(int argc, char **argv)
   /********************************************************************************************************************/
   /*                                     TODO: Memory transfer GPU -> CPU                                             */
   /********************************************************************************************************************/
-
+  particles[resIdx].copyToHost();
 
 
   // Compute reference center of mass on CPU

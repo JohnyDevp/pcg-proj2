@@ -32,15 +32,24 @@ constexpr float COLLISION_DISTANCE = 0.01f;
  * @brief Constructor
  * @param N - Number of particles
  */
-Particles::Particles(const unsigned N)
+Particles::Particles(const unsigned N) : N(N)
 {
+  pos = new float4[N];
+  vel = new float3[N];
 
+#pragma acc enter data copyin(this[0 : 1])
+#pragma acc enter data create(pos[0 : N], vel[0 : N])
 }
 
 /// @brief Destructor
 Particles::~Particles()
 {
 
+#pragma acc exit data delete (this[0 : 1])
+#pragma acc exit data delete (pos[0 : N], vel[0 : N])
+
+  delete[] pos;
+  delete[] vel;
 }
 
 /**
@@ -48,7 +57,7 @@ Particles::~Particles()
  */
 void Particles::copyToDevice()
 {
-
+#pragma acc update device(pos[0 : N], vel[0 : N])
 }
 
 /**
@@ -56,7 +65,7 @@ void Particles::copyToDevice()
  */
 void Particles::copyToHost()
 {
-
+#pragma acc update host(pos[0 : N], vel[0 : N])
 }
 
 /*********************************************************************************************************************/

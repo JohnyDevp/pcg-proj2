@@ -95,8 +95,8 @@ int main(int argc, char **argv)
   /********************************************************************************************************************/
   /*                                     TODO: Memory transfer CPU -> GPU                                             */
   /********************************************************************************************************************/
-  // particles.copyToDevice();
-  // tmpVelocities.copyToDevice();
+  particles.copyToDevice();
+  tmpVelocities.copyToDevice();
 
   // Start measurement
   const auto start = std::chrono::steady_clock::now();
@@ -124,8 +124,8 @@ int main(int argc, char **argv)
   /********************************************************************************************************************/
   /*                                     TODO: Memory transfer GPU -> CPU                                             */
   /********************************************************************************************************************/
-  // particles.copyToHost();
-  // tmpVelocities.copyToHost();
+  particles.copyToHost();
+  tmpVelocities.copyToHost();
 
   // Compute reference center of mass on CPU
   const float4 refCenterOfMass = centerOfMassRef(md);

@@ -116,10 +116,11 @@ void Velocities::copyToHost()
 
 void calculateGravitationVelocity(Particles &p, Velocities &tmpVel, const unsigned N, float dt)
 {
-  /*******************************************************************************************************************/
-  /*                    TODO: Calculate gravitation velocity, see reference CPU version,                             */
-  /*                            you can use overloaded operators defined in Vec.h                                    */
-  /*******************************************************************************************************************/
+/*******************************************************************************************************************/
+/*                    TODO: Calculate gravitation velocity, see reference CPU version,                             */
+/*                            you can use overloaded operators defined in Vec.h                                    */
+/*******************************************************************************************************************/
+#pragma acc parallel loop present(p, tmpVel)
   for (unsigned i = 0u; i < N; ++i)
   {
     float3 newVel = {0, 0, 0};
@@ -128,8 +129,8 @@ void calculateGravitationVelocity(Particles &p, Velocities &tmpVel, const unsign
 
     for (unsigned j = 0u; j < N; ++j)
     {
-      const float4 otherPos = p.pos[j];        
-      const float4 d = otherPos - currentPos; 
+      const float4 otherPos = p.pos[j];
+      const float4 d = otherPos - currentPos;
 
       const float r = d.abs() + std::numeric_limits<float>::min();
 
@@ -157,57 +158,38 @@ void calculateCollisionVelocity(Particles &p, Velocities &tmpVel, const unsigned
   /*                    TODO: Calculate collision velocity, see reference CPU version,                               */
   /*                            you can use overloaded operators defined in Vec.h                                    */
   /*******************************************************************************************************************/
-  float4 *const pPos = p.pos;
-  float3 *const pVel = p.vel;
-  float3 *const tVel = tmpVel.vel;
 
+#pragma acc parallel loop present(p, tmpVel)
   for (unsigned i = 0u; i < N; ++i)
   {
-    float newVelX{};
-    float newVelY{};
-    float newVelZ{};
+    float3 newVel = {0, 0, 0};
+    float4 *const pPos = p.pos;
+    float3 *const pVel = p.vel;
+    float3 *const tVel = tmpVel.vel;
 
-    const float posX = pPos[i].x;
-    const float posY = pPos[i].y;
-    const float posZ = pPos[i].z;
-    const float weight = pPos[i].w;
-
-    const float velX = pVel[i].x;
-    const float velY = pVel[i].y;
-    const float velZ = pVel[i].z;
+    float4 currentPos = p.pos[i];
+    float3 currentVel = p.vel[i];
 
     for (unsigned j = 0u; j < N; ++j)
     {
-      const float otherPosX = pPos[j].x;
-      const float otherPosY = pPos[j].y;
-      const float otherPosZ = pPos[j].z;
-      const float otherWeight = pPos[j].w;
+      const float4 otherPos = p.pos[j];
+      const float3 otherVel = p.vel[j];
 
-      const float otherVelX = pVel[j].x;
-      const float otherVelY = pVel[j].y;
-      const float otherVelZ = pVel[j].z;
+      const float4 d = otherPos - currentPos;
+      const float r = d.abs();
+      const float weight_diff = (2.f * otherPos.w) / (currentPos.w - otherPos.w);
 
-      const float dx = otherPosX - posX;
-      const float dy = otherPosY - posY;
-      const float dz = otherPosZ - posZ;
-
-      const float r2 = dx * dx + dy * dy + dz * dz;
-      const float r = std::sqrt(r2);
-
-      newVelX += (r > 0.f && r < COLLISION_DISTANCE)
-                     ? (((weight * velX - otherWeight * velX + 2.f * otherWeight * otherVelX) / (weight + otherWeight)) - velX)
-                     : 0.f;
-      newVelY += (r > 0.f && r < COLLISION_DISTANCE)
-                     ? (((weight * velY - otherWeight * velY + 2.f * otherWeight * otherVelY) / (weight + otherWeight)) - velY)
-                     : 0.f;
-      newVelZ += (r > 0.f && r < COLLISION_DISTANCE)
-                     ? (((weight * velZ - otherWeight * velZ + 2.f * otherWeight * otherVelZ) / (weight + otherWeight)) - velZ)
-                     : 0.f;
+      newVel.x += (r > 0.f && r < COLLISION_DISTANCE)
+                      ? (otherVel.x * weight_diff)
+                      : 0.f;
+      newVel.y += (r > 0.f && r < COLLISION_DISTANCE)
+                      ? (otherVel.y * weight_diff)
+                      : 0.f;
+      newVel.z += (r > 0.f && r < COLLISION_DISTANCE)
+                      ? (otherVel.z * weight_diff)
+                      : 0.f;
     }
-
-    tVel[i].x += newVelX;
-    tVel[i].y += newVelY;
-    tVel[i].z += newVelZ;
+    tmpVel.vel[i] += newVel;
   }
 
 } // end of calculate_collision_velocity
@@ -222,44 +204,18 @@ void calculateCollisionVelocity(Particles &p, Velocities &tmpVel, const unsigned
  */
 void updateParticles(Particles &p, Velocities &tmpVel, const unsigned N, float dt)
 {
-  /*******************************************************************************************************************/
-  /*                    TODO: Update particles position and velocity, see reference CPU version,                     */
-  /*                            you can use overloaded operators defined in Vec.h                                    */
-  /*******************************************************************************************************************/
-
-  float4 *const pPos = p.pos;
-  float3 *const pVel = p.vel;
-  float3 *const tVel = tmpVel.vel;
-
+/*******************************************************************************************************************/
+/*                    TODO: Update particles position and velocity, see reference CPU version,                     */
+/*                            you can use overloaded operators defined in Vec.h                                    */
+/*******************************************************************************************************************/
+#pragma acc parallel loop present(p, tmpVel)
   for (unsigned i = 0u; i < N; ++i)
   {
-    float posX = pPos[i].x;
-    float posY = pPos[i].y;
-    float posZ = pPos[i].z;
+    p.vel[i] += tmpVel.vel[i];
 
-    float velX = pVel[i].x;
-    float velY = pVel[i].y;
-    float velZ = pVel[i].z;
-
-    const float newVelX = tVel[i].x;
-    const float newVelY = tVel[i].y;
-    const float newVelZ = tVel[i].z;
-
-    velX += newVelX;
-    velY += newVelY;
-    velZ += newVelZ;
-
-    posX += velX * dt;
-    posY += velY * dt;
-    posZ += velZ * dt;
-
-    pPos[i].x = posX;
-    pPos[i].y = posY;
-    pPos[i].z = posZ;
-
-    pVel[i].x = velX;
-    pVel[i].y = velY;
-    pVel[i].z = velZ;
+    p.pos[i].x += p.vel[i].x * dt;
+    p.pos[i].y += p.vel[i].y * dt;
+    p.pos[i].z += p.vel[i].z * dt;
   } // end of update_particle
   //----------------------------------------------------------------------------------------------------------------------
 }
