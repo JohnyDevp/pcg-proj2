@@ -1,16 +1,16 @@
 /**
  * @file      main.cpp
  *
- * @author    Name Surname \n
+ * @author    Jan Holan \n
  *            Faculty of Information Technology \n
  *            Brno University of Technology \n
- *            xlogin00@fit.vutbr.cz
+ *            xholan11@fit.vutbr.cz
  *
  * @brief     PCG Assignment 2
  *
  * @version   2023
  *
- * @date      04 October   2023, 09:00 (created) \n
+ * @date      9 December   2024 \n
  */
 
 #include <cmath>
@@ -36,11 +36,11 @@ int main(int argc, char **argv)
   }
 
   // Number of particles
-  const unsigned N         = static_cast<unsigned>(std::stoul(argv[1]));
+  const unsigned N = static_cast<unsigned>(std::stoul(argv[1]));
   // Length of time step
-  const float    dt        = std::stof(argv[2]);
+  const float dt = std::stof(argv[2]);
   // Number of steps
-  const unsigned steps     = static_cast<unsigned>(std::stoul(argv[3]));
+  const unsigned steps = static_cast<unsigned>(std::stoul(argv[3]));
   // Write frequency
   const unsigned writeFreq = static_cast<unsigned>(std::stoul(argv[4]));
 
@@ -53,7 +53,7 @@ int main(int argc, char **argv)
 
   const std::size_t recordsCount = (writeFreq > 0) ? (steps + writeFreq - 1) / writeFreq : 0;
 
-  Particles particles{N};
+  Particles  particles{N};
   Velocities tmpVelocities{N};
 
   /********************************************************************************************************************/
@@ -66,14 +66,24 @@ int main(int argc, char **argv)
    *                            Stride of two            Offset of the first
    *       Data pointer       consecutive elements        element in FLOATS,
    *                          in FLOATS, not bytes            not bytes
-  */
-  MemDesc md(nullptr,                 0,                          0,
-             nullptr,                 0,                          0,
-             nullptr,                 0,                          0,
-             nullptr,                 0,                          0,
-             nullptr,                 0,                          0,
-             nullptr,                 0,                          0,
-             nullptr,                 0,                          0,
+   */
+  // MemDesc md(&particles.pos->x, 4, 0,
+  //            &particles.pos->y, 4, 0,
+  //            &particles.pos->z, 4, 0,
+  //            &particles.pos->w, 4, 0,
+  //            &particles.vel->x, 3, 0,
+  //            &particles.vel->y, 3, 0,
+  //            &particles.vel->z, 3, 0,
+  //            N,
+  //            recordsCount);
+
+  MemDesc md(particles.posX,           1,                         0,
+             particles.posY,           1,                         0,
+             particles.posZ,           1,                         0,
+             particles.velX,           1,                         0,
+             particles.velY,           1,                         0,
+             particles.velZ,           1,                         0,
+             particles.weight,         1,                         0,
              N,
              recordsCount);
 
@@ -85,28 +95,33 @@ int main(int argc, char **argv)
     h5Helper.init();
     h5Helper.readParticleData();
   }
-  catch (const std::exception& e)
+  catch (const std::exception &e)
   {
     std::fprintf(stderr, "Error: %s\n", e.what());
     return EXIT_FAILURE;
-  }  
+  }
 
   /********************************************************************************************************************/
   /*                                     TODO: Memory transfer CPU -> GPU                                             */
   /********************************************************************************************************************/
+  // particles.copyToDevice();
+  // tmpVelocities.copyToDevice();
 
-
-  
   // Start measurement
   const auto start = std::chrono::steady_clock::now();
 
+  // #pragma acc kernels
   for (unsigned s = 0u; s < steps; ++s)
   {
-    /******************************************************************************************************************/
-    /*                                        TODO: GPU computation                                                   */
-    /******************************************************************************************************************/
+/******************************************************************************************************************/
+/*                                        TODO: GPU computation                                                   */
+/******************************************************************************************************************/
 
+      calculateGravitationVelocity(particles, tmpVelocities, N, dt);
 
+      calculateCollisionVelocity(particles, tmpVelocities, N, dt);
+
+      updateParticles(particles, tmpVelocities, N, dt);
   }
 
   // End measurement
@@ -116,12 +131,11 @@ int main(int argc, char **argv)
   const float elapsedTime = std::chrono::duration<float>(end - start).count();
   std::printf("Time: %f s\n", elapsedTime);
 
-
   /********************************************************************************************************************/
   /*                                     TODO: Memory transfer GPU -> CPU                                             */
   /********************************************************************************************************************/
-
-
+  // particles.copyToHost();
+  // tmpVelocities.copyToHost();
 
   // Compute reference center of mass on CPU
   const float4 refCenterOfMass = centerOfMassRef(md);
@@ -137,5 +151,5 @@ int main(int argc, char **argv)
   // Writing final values to the file
   h5Helper.writeComFinal(refCenterOfMass);
   h5Helper.writeParticleDataFinal();
-}// end of main
+} // end of main
 //----------------------------------------------------------------------------------------------------------------------

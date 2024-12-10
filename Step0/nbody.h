@@ -1,16 +1,16 @@
 /**
  * @file      nbody.h
  *
- * @author    Name Surname \n
+ * @author    Jan Holan \n
  *            Faculty of Information Technology \n
  *            Brno University of Technology \n
- *            xlogin00@fit.vutbr.cz
+ *            xholan11@fit.vutbr.cz
  *
  * @brief     PCG Assignment 2
  *
  * @version   2023
  *
- * @date      04 October   2023, 09:00 (created) \n
+ * @date      9 December   2024 \n
  */
 
 #ifndef NBODY_H
@@ -34,19 +34,19 @@ struct Particles
   Particles(const unsigned N);
 
   /// @brief Copy constructor not allowed
-  Particles(const Particles&) = delete;
+  Particles(const Particles &) = delete;
 
   /// @brief Move constructor not allowed
-  Particles(Particles&&) = delete;
+  Particles(Particles &&) = delete;
 
   /// @brief Destructor
   ~Particles();
 
   /// @brief Copy assignment operator not allowed
-  Particles& operator=(const Particles&) = delete;
+  Particles &operator=(const Particles &) = delete;
 
   /// @brief Move assignment operator not allowed
-  Particles& operator=(Particles&&) = delete;
+  Particles &operator=(Particles &&) = delete;
 
   /**
    * @brief Copy particles from host to device
@@ -61,8 +61,17 @@ struct Particles
   /********************************************************************************************************************/
   /* TODO: Particles data structure optimized for use on GPU. Use float3 and float4 structures defined in file Vec.h  */
   /********************************************************************************************************************/
-
-
+  float4 *pos;
+  float3 *vel;
+  int N;
+  
+  float *posX;
+  float *posY;
+  float *posZ;
+  float *weight;
+  float *velX;
+  float *velY;
+  float *velZ;
 };
 
 /**
@@ -80,19 +89,19 @@ struct Velocities
   Velocities(const unsigned N);
 
   /// @brief Copy constructor not allowed
-  Velocities(const Velocities&) = delete;
+  Velocities(const Velocities &) = delete;
 
   /// @brief Move constructor not allowed
-  Velocities(Velocities&&) = delete;
+  Velocities(Velocities &&) = delete;
 
   /// @brief Destructor
   ~Velocities();
 
   /// @brief Copy assignment operator not allowed
-  Velocities& operator=(const Velocities&) = delete;
+  Velocities &operator=(const Velocities &) = delete;
 
   /// @brief Move assignment operator not allowed
-  Velocities& operator=(Velocities&&) = delete;
+  Velocities &operator=(Velocities &&) = delete;
 
   /**
    * @brief Copy velocities from host to device
@@ -107,7 +116,12 @@ struct Velocities
   /********************************************************************************************************************/
   /* TODO: Velocities data structure optimized for use on GPU. Use float3 and float4 structures defined in file Vec.h */
   /********************************************************************************************************************/
+  float3 *vel;
+  int N;
 
+  float *x;
+  float *y;
+  float *z;
 
 };
 
@@ -118,10 +132,10 @@ struct Velocities
  * @param N      - Number of particles
  * @param dt     - Size of the time step
  */
-void calculateGravitationVelocity(Particles&     p,
-                                  Velocities&    tmpVel,
+void calculateGravitationVelocity(Particles &p,
+                                  Velocities &tmpVel,
                                   const unsigned N,
-                                  float          dt);
+                                  float dt);
 
 /**
  * Calculate collision velocity
@@ -130,10 +144,10 @@ void calculateGravitationVelocity(Particles&     p,
  * @param N      - Number of particles
  * @param dt     - Size of the time step
  */
-void calculateCollisionVelocity(Particles&     p,
-                                Velocities&    tmpVel,
+void calculateCollisionVelocity(Particles &p,
+                                Velocities &tmpVel,
                                 const unsigned N,
-                                float          dt);
+                                float dt);
 
 /**
  * Update particles
@@ -142,10 +156,10 @@ void calculateCollisionVelocity(Particles&     p,
  * @param N      - Number of particles
  * @param dt     - Size of the time step
  */
-void updateParticles(Particles&     p,
-                     Velocities&    tmpVel,
+void updateParticles(Particles &p,
+                     Velocities &tmpVel,
                      const unsigned N,
-                     float          dt);
+                     float dt);
 
 /**
  * Calculate particles center of mass
@@ -154,15 +168,15 @@ void updateParticles(Particles&     p,
  * @param lock - pointer to a user-implemented lock
  * @param N    - Number of particles
  */
-void centerOfMass(Particles&     p,
-                  float4&        com,
-                  int*           lock,
+void centerOfMass(Particles &p,
+                  float4 &com,
+                  int *lock,
                   const unsigned N);
 
 /**
  * CPU implementation of the Center of Mass calculation
  * @param memDesc - Memory descriptor of particle data on CPU side
  */
-float4 centerOfMassRef(MemDesc& memDesc);
+float4 centerOfMassRef(MemDesc &memDesc);
 
 #endif /* NBODY_H */

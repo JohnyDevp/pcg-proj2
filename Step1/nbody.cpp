@@ -1,16 +1,16 @@
 /**
  * @file      nbody.cpp
  *
- * @author    Name Surname \n
+ * @author    Jan Holan \n
  *            Faculty of Information Technology \n
  *            Brno University of Technology \n
- *            xlogin00@fit.vutbr.cz
+ *            xholan11@fit.vutbr.cz
  *
  * @brief     PCG Assignment 2
  *
  * @version   2023
  *
- * @date      04 October   2023, 09:00 (created) \n
+ * @date      9 December   2024 \n
  */
 
 #include <cfloat>
