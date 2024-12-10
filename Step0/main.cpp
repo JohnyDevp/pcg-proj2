@@ -67,23 +67,14 @@ int main(int argc, char **argv)
    *       Data pointer       consecutive elements        element in FLOATS,
    *                          in FLOATS, not bytes            not bytes
    */
-  // MemDesc md(&particles.pos->x, 4, 0,
-  //            &particles.pos->y, 4, 0,
-  //            &particles.pos->z, 4, 0,
-  //            &particles.pos->w, 4, 0,
-  //            &particles.vel->x, 3, 0,
-  //            &particles.vel->y, 3, 0,
-  //            &particles.vel->z, 3, 0,
-  //            N,
-  //            recordsCount);
-
-  MemDesc md(particles.posX,           1,                         0,
-             particles.posY,           1,                         0,
-             particles.posZ,           1,                         0,
-             particles.velX,           1,                         0,
-             particles.velY,           1,                         0,
-             particles.velZ,           1,                         0,
-             particles.weight,         1,                         0,
+  
+  MemDesc md(&particles.pos->x, 4, 0,
+             &particles.pos->y, 4, 0,
+             &particles.pos->z, 4, 0,
+             &particles.vel->x, 3, 0,
+             &particles.vel->y, 3, 0,
+             &particles.vel->z, 3, 0,
+             &particles.pos->w, 4, 0,
              N,
              recordsCount);
 
@@ -110,7 +101,6 @@ int main(int argc, char **argv)
   // Start measurement
   const auto start = std::chrono::steady_clock::now();
 
-  // #pragma acc kernels
   for (unsigned s = 0u; s < steps; ++s)
   {
 /******************************************************************************************************************/

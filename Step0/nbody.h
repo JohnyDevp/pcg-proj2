@@ -64,14 +64,6 @@ struct Particles
   float4 *pos;
   float3 *vel;
   int N;
-  
-  float *posX;
-  float *posY;
-  float *posZ;
-  float *weight;
-  float *velX;
-  float *velY;
-  float *velZ;
 };
 
 /**
@@ -118,11 +110,6 @@ struct Velocities
   /********************************************************************************************************************/
   float3 *vel;
   int N;
-
-  float *x;
-  float *y;
-  float *z;
-
 };
 
 /**
