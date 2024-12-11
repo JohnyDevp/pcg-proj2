@@ -104,8 +104,8 @@ int main(int argc, char **argv)
     particles[1].vel[i] = particles[0].vel[i];
   }
 
-  // particles[0].copyToDevice();// Copy result from device to host
-  
+  particles[0].copyToDevice();
+  particles[1].copyToDevice();
 
   // Start measurement
   const auto start = std::chrono::steady_clock::now();
@@ -123,6 +123,18 @@ int main(int argc, char **argv)
 
   const unsigned resIdx = steps % 2; // result particles index
 
+  // End measurement
+  const auto end = std::chrono::steady_clock::now();
+
+  // Approximate simulation wall time
+  const float elapsedTime = std::chrono::duration<float>(end - start).count();
+  std::printf("Time: %f s\n", elapsedTime);
+
+  /********************************************************************************************************************/
+  /*                                     TODO: Memory transfer GPU -> CPU                                             */
+  /********************************************************************************************************************/
+  particles[0].copyToHost();
+  particles[1].copyToHost();
   // if the result end up in the second array, copy it back to the first one
   // because the md is set to the first array
   if (resIdx == 1)
@@ -134,19 +146,6 @@ int main(int argc, char **argv)
       particles[0].vel[i] = particles[1].vel[i];
     }
   }
-
-  // End measurement
-  const auto end = std::chrono::steady_clock::now();
-
-  // Approximate simulation wall time
-  const float elapsedTime = std::chrono::duration<float>(end - start).count();
-  std::printf("Time: %f s\n", elapsedTime);
-
-  /********************************************************************************************************************/
-  /*                                     TODO: Memory transfer GPU -> CPU                                             */
-  /********************************************************************************************************************/
-  // particles[0].copyToHost();
-  // particles[1].copyToHost();
 
   // Compute reference center of mass on CPU
   const float4 refCenterOfMass = centerOfMassRef(md);

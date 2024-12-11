@@ -70,99 +70,6 @@ void Particles::copyToHost()
 
 /*********************************************************************************************************************/
 
-void calculateGravitationVelocity(Particles &p, Particles &pOut, const unsigned N, float dt)
-{
-  for (unsigned i = 0u; i < N; ++i)
-  {
-    float3 newVel = {0, 0, 0};
-
-    const float4 currentPos = p.pos[i];
-    const float3 currentVel = p.vel[i];
-
-    for (unsigned j = 0u; j < N; ++j)
-    {
-      const float4 otherPos = p.pos[j];
-      const float3 otherVel = p.vel[j];
-
-      const float4 d = otherPos - currentPos;
-      float r = d.abs();
-
-      // calculate gravitational force
-      const float fr = (G * dt * otherPos.w) / (r * r * r + std::numeric_limits<float>::min());
-      newVel.x += (r > COLLISION_DISTANCE) ? (d.x * fr) : 0.f;
-      newVel.y += (r > COLLISION_DISTANCE) ? (d.y * fr) : 0.f;
-      newVel.z += (r > COLLISION_DISTANCE) ? (d.z * fr) : 0.f;
-
-      // calculate collision force
-      newVel.x += (r > 0.f && r < COLLISION_DISTANCE)
-                      ? ((((currentPos.w - otherPos.w) * currentVel.x + 2.f * otherPos.w * otherVel.x) / (currentPos.w + otherPos.w)) - currentVel.x)
-                      : 0.f;
-      newVel.y += (r > 0.f && r < COLLISION_DISTANCE)
-                      ? ((((currentPos.w - otherPos.w) * currentVel.y + 2.f * otherPos.w * otherVel.y) / (currentPos.w + otherPos.w)) - currentVel.y)
-                      : 0.f;
-      newVel.z += (r > 0.f && r < COLLISION_DISTANCE)
-                      ? ((((currentPos.w - otherPos.w) * currentVel.z + 2.f * otherPos.w * otherVel.z) / (currentPos.w + otherPos.w)) - currentVel.z)
-                      : 0.f;
-    }
-
-    pOut.vel[i] = newVel;
-  }
-
-  for (unsigned i = 0u; i < N; ++i)
-  {
-    p.vel[i] += pOut.vel[i];
-
-    p.pos[i].x += p.vel[i].x * dt;
-    p.pos[i].y += p.vel[i].y * dt;
-    p.pos[i].z += p.vel[i].z * dt;
-  }
-} // end of calculate_gravitation_velocity
-
-void calculateCollisionVelocity(Particles &p, Particles &tmpVel, const unsigned N, float dt)
-{
-  for (unsigned i = 0u; i < N; ++i)
-  {
-    float3 newVel = {0, 0, 0};
-
-    float4 currentPos = p.pos[i];
-    float3 currentVel = p.vel[i];
-
-    for (unsigned j = 0u; j < N; ++j)
-    {
-      const float4 otherPos = p.pos[j];
-      const float3 otherVel = p.vel[j];
-
-      const float4 d = otherPos - currentPos;
-      const float r = d.abs();
-
-      newVel.x += (r > 0.f && r < COLLISION_DISTANCE)
-                      ? ((((currentPos.w - otherPos.w) * currentVel.x + 2.f * otherPos.w * otherVel.x) / (currentPos.w + otherPos.w)) - currentVel.x)
-                      : 0.f;
-      newVel.y += (r > 0.f && r < COLLISION_DISTANCE)
-                      ? ((((currentPos.w - otherPos.w) * currentVel.y + 2.f * otherPos.w * otherVel.y) / (currentPos.w + otherPos.w)) - currentVel.y)
-                      : 0.f;
-      newVel.z += (r > 0.f && r < COLLISION_DISTANCE)
-                      ? ((((currentPos.w - otherPos.w) * currentVel.z + 2.f * otherPos.w * otherVel.z) / (currentPos.w + otherPos.w)) - currentVel.z)
-                      : 0.f;
-    }
-    tmpVel.vel[i] += newVel;
-  }
-
-} // end of calculate_collision_velocity
-
-void updateParticles(Particles &p, Particles &tmpVel, const unsigned N, float dt)
-{
-  for (unsigned i = 0u; i < N; ++i)
-  {
-    p.vel[i] += tmpVel.vel[i];
-
-    p.pos[i].x += p.vel[i].x * dt;
-    p.pos[i].y += p.vel[i].y * dt;
-    p.pos[i].z += p.vel[i].z * dt;
-  } // end of update_particle
-  //----------------------------------------------------------------------------------------------------------------------
-}
-
 /**
  * Calculate velocity
  * @param pIn  - particles input
@@ -172,10 +79,11 @@ void updateParticles(Particles &p, Particles &tmpVel, const unsigned N, float dt
  */
 void calculateVelocity(Particles &pIn, Particles &pOut, const unsigned N, float dt)
 {
-  /*******************************************************************************************************************/
-  /*                    TODO: Calculate gravitation velocity, see reference CPU version,                             */
-  /*                            you can use overloaded operators defined in Vec.h                                    */
-  /*******************************************************************************************************************/
+/*******************************************************************************************************************/
+/*                    TODO: Calculate gravitation velocity, see reference CPU version,                             */
+/*                            you can use overloaded operators defined in Vec.h                                    */
+/*******************************************************************************************************************/
+#pragma acc parallel loop present(pIn, pOut)
   for (unsigned i = 0u; i < N; ++i)
   {
     float3 newVel = {0, 0, 0};
@@ -209,35 +117,12 @@ void calculateVelocity(Particles &pIn, Particles &pOut, const unsigned N, float 
                       : 0.f;
     }
 
-    // pOut.vel[i] = newVel;
-
-    //=====================
     pOut.vel[i] = pIn.vel[i] + newVel;
 
-    pOut.pos[i].x   = pIn.pos[i].x + pOut.vel[i].x * dt;  
-    pOut.pos[i].y   = pIn.pos[i].y + pOut.vel[i].y * dt; 
-    pOut.pos[i].z   = pIn.pos[i].z + pOut.vel[i].z * dt; 
+    pOut.pos[i].x = pIn.pos[i].x + pOut.vel[i].x * dt;
+    pOut.pos[i].y = pIn.pos[i].y + pOut.vel[i].y * dt;
+    pOut.pos[i].z = pIn.pos[i].z + pOut.vel[i].z * dt;
   }
-
-  // update real
-
-  // for (unsigned i = 0u; i < N; ++i)
-  // {
-  //   pIn.vel[i]    += pOut.vel[i];
-
-  //   pIn.pos[i].x  += pIn.vel[i].x * dt;
-  //   pIn.pos[i].y  += pIn.vel[i].y * dt;
-  //   pIn.pos[i].z  += pIn.vel[i].z * dt;
-
-
-  //   pOut.vel[i].x   = pIn.vel[i].x;
-  //   pOut.vel[i].y   = pIn.vel[i].y;
-  //   pOut.vel[i].z   = pIn.vel[i].z;
-
-  //   pOut.pos[i].x   = pIn.pos[i].x;  
-  //   pOut.pos[i].y   = pIn.pos[i].y; 
-  //   pOut.pos[i].z   = pIn.pos[i].z; 
-  // }
 
 } // end of calculate_gravitation_velocity
 //----------------------------------------------------------------------------------------------------------------------
