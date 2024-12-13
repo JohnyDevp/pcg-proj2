@@ -34,19 +34,19 @@ struct Particles
   Particles(const unsigned N);
 
   /// @brief Copy constructor not allowed
-  Particles(const Particles&) = delete;
+  Particles(const Particles &) = delete;
 
   /// @brief Move constructor not allowed
-  Particles(Particles&&) = delete;
+  Particles(Particles &&) = delete;
 
   /// @brief Destructor
   ~Particles();
 
   /// @brief Copy assignment operator not allowed
-  Particles& operator=(const Particles&) = delete;
+  Particles &operator=(const Particles &) = delete;
 
   /// @brief Move assignment operator not allowed
-  Particles& operator=(Particles&&) = delete;
+  Particles &operator=(Particles &&) = delete;
 
   /**
    * @brief Copy particles from host to device
@@ -61,8 +61,9 @@ struct Particles
   /********************************************************************************************************************/
   /* TODO: Particles data structure optimized for use on GPU. Use float3 and float4 structures defined in file Vec.h  */
   /********************************************************************************************************************/
-
-
+  float4 *pos;
+  float3 *vel;
+  int N;
 };
 
 /**

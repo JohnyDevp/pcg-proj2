@@ -32,15 +32,24 @@ constexpr float COLLISION_DISTANCE = 0.01f;
  * @brief Constructor
  * @param N - Number of particles
  */
-Particles::Particles(const unsigned N)
+Particles::Particles(const unsigned N) : N(N)
 {
+  pos = new float4[N];
+  vel = new float3[N];
 
+#pragma acc enter data copyin(this[0 : 1])
+#pragma acc enter data create(pos[0 : N], vel[0 : N])
 }
 
 /// @brief Destructor
 Particles::~Particles()
 {
 
+#pragma acc exit data delete (this[0 : 1])
+#pragma acc exit data delete (pos[0 : N], vel[0 : N])
+
+  delete[] pos;
+  delete[] vel;
 }
 
 /**
@@ -48,7 +57,7 @@ Particles::~Particles()
  */
 void Particles::copyToDevice()
 {
-
+#pragma acc update device(pos[0 : N], vel[0 : N])
 }
 
 /**
@@ -56,7 +65,7 @@ void Particles::copyToDevice()
  */
 void Particles::copyToHost()
 {
-
+#pragma acc update host(pos[0 : N], vel[0 : N])
 }
 
 /*********************************************************************************************************************/
@@ -68,15 +77,54 @@ void Particles::copyToHost()
  * @param N    - Number of particles
  * @param dt   - Size of the time step
  */
-void calculateVelocity(Particles& pIn, Particles& pOut, const unsigned N, float dt)
+void calculateVelocity(Particles &pIn, Particles &pOut, const unsigned N, float dt)
 {
-  /*******************************************************************************************************************/
-  /*                    TODO: Calculate gravitation velocity, see reference CPU version,                             */
-  /*                            you can use overloaded operators defined in Vec.h                                    */
-  /*******************************************************************************************************************/
+/*******************************************************************************************************************/
+/*                    TODO: Calculate gravitation velocity, see reference CPU version,                             */
+/*                            you can use overloaded operators defined in Vec.h                                    */
+/*******************************************************************************************************************/
+#pragma acc parallel loop present(pIn, pOut)
+  for (unsigned i = 0u; i < N; ++i)
+  {
+    float3 newVel = {0, 0, 0};
 
+    const float4 currentPos = pIn.pos[i];
+    const float3 currentVel = pIn.vel[i];
 
-}// end of calculate_gravitation_velocity
+    for (unsigned j = 0u; j < N; ++j)
+    {
+      const float4 otherPos = pIn.pos[j];
+      const float3 otherVel = pIn.vel[j];
+
+      const float4 d = otherPos - currentPos;
+      float r = d.abs();
+
+      // calculate gravitational force
+      const float fr = (G * dt * otherPos.w) / (r * r * r + std::numeric_limits<float>::min());
+      newVel.x += (r > COLLISION_DISTANCE) ? (d.x * fr) : 0.f;
+      newVel.y += (r > COLLISION_DISTANCE) ? (d.y * fr) : 0.f;
+      newVel.z += (r > COLLISION_DISTANCE) ? (d.z * fr) : 0.f;
+
+      // calculate collision force
+      newVel.x += (r > 0.f && r < COLLISION_DISTANCE)
+                      ? ((((currentPos.w - otherPos.w) * currentVel.x + 2.f * otherPos.w * otherVel.x) / (currentPos.w + otherPos.w)) - currentVel.x)
+                      : 0.f;
+      newVel.y += (r > 0.f && r < COLLISION_DISTANCE)
+                      ? ((((currentPos.w - otherPos.w) * currentVel.y + 2.f * otherPos.w * otherVel.y) / (currentPos.w + otherPos.w)) - currentVel.y)
+                      : 0.f;
+      newVel.z += (r > 0.f && r < COLLISION_DISTANCE)
+                      ? ((((currentPos.w - otherPos.w) * currentVel.z + 2.f * otherPos.w * otherVel.z) / (currentPos.w + otherPos.w)) - currentVel.z)
+                      : 0.f;
+    }
+
+    pOut.vel[i] = pIn.vel[i] + newVel;
+
+    pOut.pos[i].x = pIn.pos[i].x + pOut.vel[i].x * dt;
+    pOut.pos[i].y = pIn.pos[i].y + pOut.vel[i].y * dt;
+    pOut.pos[i].z = pIn.pos[i].z + pOut.vel[i].z * dt;
+  }
+
+} // end of calculate_gravitation_velocity
 //----------------------------------------------------------------------------------------------------------------------
 
 /**
@@ -85,14 +133,45 @@ void calculateVelocity(Particles& pIn, Particles& pOut, const unsigned N, float 
  * @param comBuffer - pointer to a center of mass buffer
  * @param N         - Number of particles
  */
-void centerOfMass(Particles& p, float4* comBuffer, const unsigned N)
+void centerOfMass(Particles &p, float4 *comBuffer, const unsigned N)
 {
   /********************************************************************************************************************/
   /*                 TODO: Calculate partiles center of mass inside center of mass buffer                             */
   /********************************************************************************************************************/
 
-  
-}// end of centerOfMass
+#pragma acc data present(p) copy(comBuffer)
+  {
+    // Declare local reduction variables for x, y, z, and w
+    float x_sum = 0.0f, y_sum = 0.0f, z_sum = 0.0f, w_sum = 0.0f;
+
+// Parallel reduction for all particles
+#pragma acc parallel loop reduction(+ : x_sum, y_sum, z_sum, w_sum)
+    for (std::size_t i = 0; i < N; i++)
+    {
+      const float4 pos = {p.pos[i].x, p.pos[i].y, p.pos[i].z, p.pos[i].w};
+      const float4 d = {pos.x - comBuffer->x,
+                        pos.y - comBuffer->y,
+                        pos.z - comBuffer->z,
+                        ((pos.w + comBuffer->w) > 0.0f)
+                            ? (pos.w / (pos.w + comBuffer->w))
+                            : 0.0f};
+      x_sum += d.x * d.w;
+      y_sum += d.y * d.w;
+      z_sum += d.z * d.w;
+      w_sum += pos.w;
+    }
+
+// Write back the reduced results to comBuffer (single-threaded section)
+#pragma acc serial present(comBuffer)
+    {
+      comBuffer->x += x_sum;
+      comBuffer->y += y_sum;
+      comBuffer->z += z_sum;
+      comBuffer->w += w_sum;
+    }
+  }
+
+} // end of centerOfMass
 //----------------------------------------------------------------------------------------------------------------------
 
 /**
