@@ -36,11 +36,11 @@ int main(int argc, char **argv)
   }
 
   // Number of particles
-  const unsigned N         = static_cast<unsigned>(std::stoul(argv[1]));
+  const unsigned N = static_cast<unsigned>(std::stoul(argv[1]));
   // Length of time step
-  const float    dt        = std::stof(argv[2]);
+  const float dt = std::stof(argv[2]);
   // Number of steps
-  const unsigned steps     = static_cast<unsigned>(std::stoul(argv[3]));
+  const unsigned steps = static_cast<unsigned>(std::stoul(argv[3]));
   // Write frequency
   const unsigned writeFreq = static_cast<unsigned>(std::stoul(argv[4]));
 
@@ -65,14 +65,14 @@ int main(int argc, char **argv)
    *                            Stride of two            Offset of the first
    *       Data pointer       consecutive elements        element in FLOATS,
    *                          in FLOATS, not bytes            not bytes
-  */
-  MemDesc md(nullptr,                 0,                          0,
-             nullptr,                 0,                          0,
-             nullptr,                 0,                          0,
-             nullptr,                 0,                          0,
-             nullptr,                 0,                          0,
-             nullptr,                 0,                          0,
-             nullptr,                 0,                          0,
+   */
+  MemDesc md(&particles[0].pos->x, 4, 0,
+             &particles[0].pos->y, 4, 0,
+             &particles[0].pos->z, 4, 0,
+             &particles[0].vel->x, 3, 0,
+             &particles[0].vel->y, 3, 0,
+             &particles[0].vel->z, 3, 0,
+             &particles[0].pos->w, 4, 0,
              N,
              recordsCount);
 
@@ -84,7 +84,7 @@ int main(int argc, char **argv)
     h5Helper.init();
     h5Helper.readParticleData();
   }
-  catch (const std::exception& e)
+  catch (const std::exception &e)
   {
     std::fprintf(stderr, "Error: %s\n", e.what());
     return EXIT_FAILURE;
@@ -93,36 +93,42 @@ int main(int argc, char **argv)
   /********************************************************************************************************************/
   /*                   TODO: Allocate memory for center of mass buffer. Remember to clear it.                         */
   /********************************************************************************************************************/
-  float4* comBuffer = {};
+  float4 *comBuffer = new float4{0.0f, 0.0f, 0.0f, 0.0f};
 
   /********************************************************************************************************************/
   /*                                     TODO: Memory transfer CPU -> GPU                                             */
   /********************************************************************************************************************/
+  // copy loaded data in particles[0] to particles[1]
+  for (unsigned i = 0u; i < N; ++i)
+  {
+    particles[1].pos[i] = particles[0].pos[i];
+    particles[1].vel[i] = particles[0].vel[i];
+  }
 
-  
+  particles[0].copyToDevice();
+  particles[1].copyToDevice();
+
   // Start measurement
   const auto start = std::chrono::steady_clock::now();
 
   for (unsigned s = 0u; s < steps; ++s)
   {
-    const unsigned srcIdx = s % 2;        // source particles index
-    const unsigned dstIdx = (s + 1) % 2;  // destination particles index
+    const unsigned srcIdx = s % 2;       // source particles index
+    const unsigned dstIdx = (s + 1) % 2; // destination particles index
 
     /******************************************************************************************************************/
     /*                                        TODO: GPU computation                                                   */
     /******************************************************************************************************************/
-
-
+    calculateVelocity(particles[srcIdx], particles[dstIdx], N, dt);
   }
 
-  const unsigned resIdx = steps % 2;    // result particles index
+  const unsigned resIdx = steps % 2; // result particles index
 
   /********************************************************************************************************************/
   /*                                 TODO: Invocation of center of mass kernel                                        */
   /********************************************************************************************************************/
 
-
-  const float4 comFinal = {};
+  centerOfMass(particles[resIdx], comBuffer, N);
 
   // End measurement
   const auto end = std::chrono::steady_clock::now();
@@ -131,14 +137,25 @@ int main(int argc, char **argv)
   const float elapsedTime = std::chrono::duration<float>(end - start).count();
   std::printf("Time: %f s\n", elapsedTime);
 
-  
-
   /********************************************************************************************************************/
   /*                                     TODO: Memory transfer GPU -> CPU                                             */
   /********************************************************************************************************************/
 
+  const float4 comFinal = {comBuffer->x, comBuffer->y, comBuffer->z, comBuffer->w};
 
-
+  particles[0].copyToHost();
+  particles[1].copyToHost();
+  // if the result end up in the second array, copy it back to the first one
+  // because the md is set to the first array
+  if (resIdx == 1)
+  {
+    // Copy result from device to host
+    for (unsigned i = 0u; i < N; ++i)
+    {
+      particles[0].pos[i] = particles[1].pos[i];
+      particles[0].vel[i] = particles[1].vel[i];
+    }
+  }
 
   // Compute reference center of mass on CPU
   const float4 refCenterOfMass = centerOfMassRef(md);
@@ -162,7 +179,6 @@ int main(int argc, char **argv)
   /********************************************************************************************************************/
   /*                                TODO: Free center of mass buffer memory                                           */
   /********************************************************************************************************************/
-
-
-}// end of main
+  delete comBuffer;
+} // end of main
 //----------------------------------------------------------------------------------------------------------------------
