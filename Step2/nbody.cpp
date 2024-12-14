@@ -138,38 +138,71 @@ void centerOfMass(Particles &p, float4 *comBuffer, const unsigned N)
   /********************************************************************************************************************/
   /*                 TODO: Calculate partiles center of mass inside center of mass buffer                             */
   /********************************************************************************************************************/
+    // Separate reduction variables for each component
+    float comX = 0.0f;
+    float comY = 0.0f;
+    float comZ = 0.0f;
+    float comW = 0.0f;
 
-#pragma acc data present(p) copy(comBuffer)
-  {
-    // Declare local reduction variables for x, y, z, and w
-    float x_sum = 0.0f, y_sum = 0.0f, z_sum = 0.0f, w_sum = 0.0f;
+    // Parallel loop with separate reductions for each component
+    // #pragma acc parallel loop firstprivate(comX,comY,comZ,comW) present(p) reduction(+:comX, comY, comZ, comW) present(p)
+    #pragma acc kernels
+    for (unsigned i = 0; i < N; i++) {
+        const float4 b = p.pos[i]; // Access the float4 position
+        float dW = (comW + b.w) > 0.f ? (b.w / (comW + b.w)) : 0.f;
 
-// Parallel reduction for all particles
-#pragma acc parallel loop reduction(+ : x_sum, y_sum, z_sum, w_sum)
-    for (std::size_t i = 0; i < N; i++)
-    {
-      const float4 pos = {p.pos[i].x, p.pos[i].y, p.pos[i].z, p.pos[i].w};
-      const float4 d = {pos.x - comBuffer->x,
-                        pos.y - comBuffer->y,
-                        pos.z - comBuffer->z,
-                        ((pos.w + comBuffer->w) > 0.0f)
-                            ? (pos.w / (pos.w + comBuffer->w))
-                            : 0.0f};
-      x_sum += d.x * d.w;
-      y_sum += d.y * d.w;
-      z_sum += d.z * d.w;
-      w_sum += pos.w;
+        comX += (b.x - comX) * dW;
+        comY += (b.y - comY) * dW;
+        comZ += (b.z - comZ) * dW;
+        comW += b.w;
     }
 
-// Write back the reduced results to comBuffer (single-threaded section)
-#pragma acc serial present(comBuffer)
-    {
-      comBuffer->x += x_sum;
-      comBuffer->y += y_sum;
-      comBuffer->z += z_sum;
-      comBuffer->w += w_sum;
-    }
-  }
+    // Atomic updates to combine the local reductions into the global center of mass buffer
+    #pragma acc atomic update
+    comBuffer->x += comX;
+
+    #pragma acc atomic update
+    comBuffer->y += comY;
+
+    #pragma acc atomic update
+    comBuffer->z += comZ;
+
+    #pragma acc atomic update
+    comBuffer->w += comW;
+
+// #pragma acc data present(p) copy(comBuffer)
+//   {
+//     // Declare local reduction variables for x, y, z, and w
+//     float x_sum = 0.0f, y_sum = 0.0f, z_sum = 0.0f, w_sum = 0.0f;
+
+//     // float4 localCom = {0.0f, 0.0f, 0.0f, 0.0f};
+
+//     // Parallel reduction for all particles
+// #pragma acc parallel loop reduction(+ : x_sum, y_sum, z_sum, w_sum)
+//     for (std::size_t i = 0; i < N; i++)
+//     {
+//       const float4 pos = {p.pos[i].x, p.pos[i].y, p.pos[i].z, p.pos[i].w};
+//       const float4 d = {pos.x - x_sum,
+//                         pos.y - y_sum,
+//                         pos.z - z_sum,
+//                         ((pos.w + w_sum) > 0.0f)
+//                             ? (pos.w / (pos.w + w_sum))
+//                             : 0.0f};
+//       x_sum += d.x * d.w;
+//       y_sum += d.y * d.w;
+//       z_sum += d.z * d.w;
+//       w_sum += pos.w;
+//     }
+
+// // Write back the reduced results to comBuffer (single-threaded section)
+// #pragma acc serial present(comBuffer)
+//     {
+//       comBuffer->x += x_sum;
+//       comBuffer->y += y_sum;
+//       comBuffer->z += z_sum;
+//       comBuffer->w += w_sum;
+//     }
+//   }
 
 } // end of centerOfMass
 //----------------------------------------------------------------------------------------------------------------------

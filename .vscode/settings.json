@@ -1,6 +1,7 @@
 {
 	"files.associations": {
 		"*.py": "python",
-		"limits": "cpp"
+		"limits": "cpp",
+		"atomic": "cpp"
 	}
 }

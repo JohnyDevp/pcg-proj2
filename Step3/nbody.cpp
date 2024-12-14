@@ -20,7 +20,7 @@
 #include "Vec.h"
 
 /* Constants */
-constexpr float G                  = 6.67384e-11f;
+constexpr float G = 6.67384e-11f;
 constexpr float COLLISION_DISTANCE = 0.01f;
 
 /*********************************************************************************************************************/
@@ -86,7 +86,8 @@ void calculateVelocity(Particles &pIn, Particles &pOut, const unsigned N, float 
 #pragma acc parallel loop present(pIn, pOut)
   for (unsigned i = 0u; i < N; ++i)
   {
-    float3 newVel = {0, 0, 0};
+    float3 newVel_first = {0, 0, 0};
+    float3 newVel_second = {0, 0, 0};
 
     const float4 currentPos = pIn.pos[i];
     const float3 currentVel = pIn.vel[i];
@@ -97,27 +98,36 @@ void calculateVelocity(Particles &pIn, Particles &pOut, const unsigned N, float 
       const float3 otherVel = pIn.vel[j];
 
       const float4 d = otherPos - currentPos;
-      float r = d.abs();
+      const float r2 = d.x * d.x + d.y * d.y + d.z * d.z;
+      const float r = std::sqrt(r2);
 
+      const float f = G * currentPos.w * otherPos.w / r2 + std::numeric_limits<float>::min();
+
+      const float r_w_min = r + std::numeric_limits<float>::min();
       // calculate gravitational force
-      const float fr = (G * dt * otherPos.w) / (r * r * r + std::numeric_limits<float>::min());
-      newVel.x += (r > COLLISION_DISTANCE) ? (d.x * fr) : 0.f;
-      newVel.y += (r > COLLISION_DISTANCE) ? (d.y * fr) : 0.f;
-      newVel.z += (r > COLLISION_DISTANCE) ? (d.z * fr) : 0.f;
+      newVel_first.x += (r_w_min > COLLISION_DISTANCE) ? d.x / r_w_min * f : 0.f;
+      newVel_first.y += (r_w_min > COLLISION_DISTANCE) ? d.y / r_w_min * f : 0.f;
+      newVel_first.z += (r_w_min > COLLISION_DISTANCE) ? d.z / r_w_min * f : 0.f;
 
       // calculate collision force
-      newVel.x += (r > 0.f && r < COLLISION_DISTANCE)
-                      ? ((((currentPos.w - otherPos.w) * currentVel.x + 2.f * otherPos.w * otherVel.x) / (currentPos.w + otherPos.w)) - currentVel.x)
-                      : 0.f;
-      newVel.y += (r > 0.f && r < COLLISION_DISTANCE)
-                      ? ((((currentPos.w - otherPos.w) * currentVel.y + 2.f * otherPos.w * otherVel.y) / (currentPos.w + otherPos.w)) - currentVel.y)
-                      : 0.f;
-      newVel.z += (r > 0.f && r < COLLISION_DISTANCE)
-                      ? ((((currentPos.w - otherPos.w) * currentVel.z + 2.f * otherPos.w * otherVel.z) / (currentPos.w + otherPos.w)) - currentVel.z)
-                      : 0.f;
+      newVel_second.x += (r > 0.f && r < COLLISION_DISTANCE)
+                             ? ((((currentPos.w - otherPos.w) * currentVel.x + 2.f * otherPos.w * otherVel.x) / (currentPos.w + otherPos.w)) - currentVel.x)
+                             : 0.f;
+      newVel_second.y += (r > 0.f && r < COLLISION_DISTANCE)
+                             ? ((((currentPos.w - otherPos.w) * currentVel.y + 2.f * otherPos.w * otherVel.y) / (currentPos.w + otherPos.w)) - currentVel.y)
+                             : 0.f;
+      newVel_second.z += (r > 0.f && r < COLLISION_DISTANCE)
+                             ? ((((currentPos.w - otherPos.w) * currentVel.z + 2.f * otherPos.w * otherVel.z) / (currentPos.w + otherPos.w)) - currentVel.z)
+                             : 0.f;
     }
 
-    pOut.vel[i] = pIn.vel[i] + newVel;
+    newVel_first.x *= dt / currentPos.w;
+    newVel_first.y *= dt / currentPos.w;
+    newVel_first.z *= dt / currentPos.w;
+
+    const float3 finvel = newVel_first + newVel_second;
+
+    pOut.vel[i] = pIn.vel[i] + finvel;
 
     pOut.pos[i].x = pIn.pos[i].x + pOut.vel[i].x * dt;
     pOut.pos[i].y = pIn.pos[i].y + pOut.vel[i].y * dt;
@@ -138,39 +148,79 @@ void centerOfMass(Particles &p, float4 *comBuffer, const unsigned N)
   /********************************************************************************************************************/
   /*                 TODO: Calculate partiles center of mass inside center of mass buffer                             */
   /********************************************************************************************************************/
+  const unsigned blocks = 8;
+  float4 myCom[blocks] = {0.0f, 0.0f, 0.0f, 0.0f};
 
-#pragma acc data present(p) copy(comBuffer)
+// Parallel loop with separate reductions for each component
+#pragma acc parallel loop present(p)
+  for (unsigned i = 0; i < blocks; i++)
   {
-    // Declare local reduction variables for x, y, z, and w
-    float x_sum = 0.0f, y_sum = 0.0f, z_sum = 0.0f, w_sum = 0.0f;
+    const int elementsPerBlock = (N / blocks) + 1;
+    const int startIdx = elementsPerBlock * i;
 
-// Parallel reduction for all particles
-#pragma acc parallel loop reduction(+ : x_sum, y_sum, z_sum, w_sum)
-    for (std::size_t i = 0; i < N; i++)
+#pragma acc loop seq
+    for (unsigned j = startIdx; j - startIdx < elementsPerBlock; j++)
     {
-      const float4 pos = {p.pos[i].x, p.pos[i].y, p.pos[i].z, p.pos[i].w};
-      const float4 d = {pos.x - comBuffer->x,
-                        pos.y - comBuffer->y,
-                        pos.z - comBuffer->z,
-                        ((pos.w + comBuffer->w) > 0.0f)
-                            ? (pos.w / (pos.w + comBuffer->w))
-                            : 0.0f};
-      x_sum += d.x * d.w;
-      y_sum += d.y * d.w;
-      z_sum += d.z * d.w;
-      w_sum += pos.w;
-    }
+      if (j >= N)
+        continue;
 
-// Write back the reduced results to comBuffer (single-threaded section)
-#pragma acc serial present(comBuffer)
-    {
-      comBuffer->x += x_sum;
-      comBuffer->y += y_sum;
-      comBuffer->z += z_sum;
-      comBuffer->w += w_sum;
+      const float4 b = p.pos[j]; // Access the float4 position
+      float dW = (myCom[i].w + b.w) > 0.f ? (b.w / (myCom[i].w + b.w)) : 0.f;
+
+      myCom[i].x += (b.x - myCom[i].x) * dW;
+      myCom[i].y += (b.y - myCom[i].y) * dW;
+      myCom[i].z += (b.z - myCom[i].z) * dW;
+      myCom[i].w += b.w;
     }
   }
 
+// final reduction
+#pragma acc loop seq
+  for (unsigned i = 0; i < blocks; i++)
+  {
+    const float4 b = myCom[i]; // Access the float4 position
+    // rewrite for comBuffer
+    float dW = (comBuffer->w + b.w) > 0.f ? (b.w / (comBuffer->w + b.w)) : 0.f;
+
+    comBuffer->x += (b.x - comBuffer->x) * dW;
+    comBuffer->y += (b.y - comBuffer->y) * dW;
+    comBuffer->z += (b.z - comBuffer->z) * dW;
+    comBuffer->w += b.w;
+  }
+
+  // good .......................................................
+
+  // Separate reduction variables for each component
+  // float comX = 0.0f;
+  // float comY = 0.0f;
+  // float comZ = 0.0f;
+  // float comW = 0.0f;
+
+  // // Parallel loop with separate reductions for each component
+  // #pragma acc kernels present(p)// parallel loop reduction(+ : comX, comY, comZ, comW) present(p)
+  // for (unsigned i = 0; i < N; i++)
+  // {
+  //   const float4 b = p.pos[i]; // Access the float4 position
+  //   float dW = (comW + b.w) > 0.f ? (b.w / (comW + b.w)) : 0.f;
+
+  //   comX += (b.x - comX) * dW;
+  //   comY += (b.y - comY) * dW;
+  //   comZ += (b.z - comZ) * dW;
+  //   comW += b.w;
+  // }
+
+  // // Atomic updates to combine the local reductions into the global center of mass buffer
+  // #pragma acc atomic update
+  // comBuffer->x += comX;
+
+  // #pragma acc atomic update
+  // comBuffer->y += comY;
+
+  // #pragma acc atomic update
+  // comBuffer->z += comZ;
+
+  // #pragma acc atomic update
+  // comBuffer->w += comW;
 } // end of centerOfMass
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -179,14 +229,14 @@ void centerOfMass(Particles &p, float4 *comBuffer, const unsigned N)
  * @param particles - All particles in the system
  * @param N         - Number of particles
  */
-float4 centerOfMassRef(MemDesc& memDesc)
+float4 centerOfMassRef(MemDesc &memDesc)
 {
   float4 com{};
 
   for (std::size_t i{}; i < memDesc.getDataSize(); i++)
   {
     const float3 pos = {memDesc.getPosX(i), memDesc.getPosY(i), memDesc.getPosZ(i)};
-    const float  w   = memDesc.getWeight(i);
+    const float w = memDesc.getWeight(i);
 
     // Calculate the vector on the line connecting current body and most recent position of center-of-mass
     // Calculate weight ratio only if at least one particle isn't massless
@@ -194,8 +244,8 @@ float4 centerOfMassRef(MemDesc& memDesc)
                       pos.y - com.y,
                       pos.z - com.z,
                       ((memDesc.getWeight(i) + com.w) > 0.0f)
-                        ? ( memDesc.getWeight(i) / (memDesc.getWeight(i) + com.w))
-                        : 0.0f};
+                          ? (memDesc.getWeight(i) / (memDesc.getWeight(i) + com.w))
+                          : 0.0f};
 
     // Update position and weight of the center-of-mass according to the weight ration and vector
     com.x += d.x * d.w;
@@ -205,5 +255,5 @@ float4 centerOfMassRef(MemDesc& memDesc)
   }
 
   return com;
-}// enf of centerOfMassRef
+} // enf of centerOfMassRef
 //----------------------------------------------------------------------------------------------------------------------
