@@ -176,8 +176,18 @@ void centerOfMass(Particles &p, float4 *comBuffer, const unsigned N)
       comBuffer[i].w += b.w;
     }
   }
+  // final reduction
+#pragma acc parallel loop seq
+  for (unsigned i = 1; i < blocks; i++)
+  {
+    const float4 b = comBuffer[i]; // Access the float4 position
+    float dW = (comBuffer[0].w + b.w) > 0.f ? (b.w / (comBuffer[0].w + b.w)) : 0.f;
 
-#pragma acc update host(comBuffer[0 : blocks])
+    comBuffer[0].x += (b.x - comBuffer[0].x) * dW;
+    comBuffer[0].y += (b.y - comBuffer[0].y) * dW;
+    comBuffer[0].z += (b.z - comBuffer[0].z) * dW;
+    comBuffer[0].w += b.w;
+  }
 
   //======================================================================================================================
   //======================================================================================================================

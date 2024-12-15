@@ -153,25 +153,16 @@ int main(int argc, char **argv)
     {
       auto recordNum = getRecordNum(s);
 
+      particles[0].copyToHost();
+      particles[1].copyToHost();
+
       h5Helper.writeParticleData(recordNum);
 
       centerOfMass(particles[dstIdx], comBuffer, N);
-      // do the final part of reduction from the local parts
-      // final reduction
-      float4 comFinal = {0.0f, 0.0f, 0.0f, 0.0f};
-#pragma acc data update host(comBuffer[0 : blocks])
-      for (unsigned i = 0; i < blocks; i++)
-      {
-        const float4 b = comBuffer[i]; // Access the float4 position
-        // rewrite for comBuffer
-        float dW = (comFinal.w + b.w) > 0.f ? (b.w / (comFinal.w + b.w)) : 0.f;
+      
+#pragma acc update self(comBuffer[0])
 
-        comFinal.x += (b.x - comFinal.x) * dW;
-        comFinal.y += (b.y - comFinal.y) * dW;
-        comFinal.z += (b.z - comFinal.z) * dW;
-        comFinal.w += b.w;
-      }
-
+      float4 comFinal = {comBuffer[0].x, comBuffer[0].y, comBuffer[0].z, comBuffer[0].w};
       h5Helper.writeCom(comFinal, recordNum);
     }
   }
@@ -185,20 +176,6 @@ int main(int argc, char **argv)
 
   // final reduction
   centerOfMass(particles[resIdx], comBuffer, N);
-  // do the final part of reduction from the local parts
-  float4 comFinal = {0.0f, 0.0f, 0.0f, 0.0f};
-#pragma acc data update host(comBuffer[0 : blocks])
-  for (unsigned i = 0; i < blocks; i++)
-  {
-    const float4 b = comBuffer[i]; // Access the float4 position
-    // rewrite for comBuffer
-    float dW = (comFinal.w + b.w) > 0.f ? (b.w / (comFinal.w + b.w)) : 0.f;
-
-    comFinal.x += (b.x - comFinal.x) * dW;
-    comFinal.y += (b.y - comFinal.y) * dW;
-    comFinal.z += (b.z - comFinal.z) * dW;
-    comFinal.w += b.w;
-  }
 
   // End measurement
   const auto end = std::chrono::steady_clock::now();
@@ -207,9 +184,11 @@ int main(int argc, char **argv)
   const float elapsedTime = std::chrono::duration<float>(end - start).count();
   std::printf("Time: %f s\n", elapsedTime);
 
-  /********************************************************************************************************************/
-  /*                                     TODO: Memory transfer GPU -> CPU                                             */
-  /********************************************************************************************************************/
+/********************************************************************************************************************/
+/*                                     TODO: Memory transfer GPU -> CPU                                             */
+/********************************************************************************************************************/
+#pragma acc update self(comBuffer[0])
+  float4 comFinal = {comBuffer[0].x, comBuffer[0].y, comBuffer[0].z, comBuffer[0].w};
 
   particles[0].copyToHost();
   particles[1].copyToHost();
