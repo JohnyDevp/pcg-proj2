@@ -94,7 +94,7 @@ int main(int argc, char **argv)
   /*                   TODO: Allocate memory for center of mass buffer. Remember to clear it.                         */
   /********************************************************************************************************************/
 
-  unsigned blocks = 32;
+  unsigned blocks = N;
   float4 *comBuffer = (float4 *)malloc(blocks * sizeof(float4));
   for (unsigned i = 0u; i < blocks; ++i)
   {
@@ -185,8 +185,7 @@ const unsigned computeMassStream = 3;
 /********************************************************************************************************************/
 
 // final reduction
-// need to wait for the velocity calculation to finish
-#pragma acc wait(computeVelocityStream)
+
   centerOfMass(particles[resIdx], comBuffer, N);
 #pragma acc wait(computeMassStream)
 
@@ -196,59 +195,6 @@ const unsigned computeMassStream = 3;
   // Approximate simulation wall time
   const float elapsedTime = std::chrono::duration<float>(end - start).count();
   std::printf("Time: %f s\n", elapsedTime);
-
-#ifdef ASDSAD
-  /********************************************************************************************************************/
-  /*            TODO: Edit the loop to work asynchronously and overlap computation with data transfers.               */
-  /*                  Use shouldWrite lambda to determine if data should be outputted to file.                        */
-  /*                           if (shouldWrite(s, writeFreq)) { ... }                                                 */
-  /*                        Use getRecordNum lambda to get the record number.                                         */
-  /********************************************************************************************************************/
-  for (unsigned s = 0u; s < steps; ++s)
-  {
-    const unsigned srcIdx = s % 2;       // source particles index
-    const unsigned dstIdx = (s + 1) % 2; // destination particles index
-
-    /******************************************************************************************************************/
-    /*                                        TODO: GPU computation                                                   */
-    /******************************************************************************************************************/
-    calculateVelocity(particles[srcIdx], particles[dstIdx], N, dt);
-
-    if (shouldWrite(s))
-    {
-      auto recordNum = getRecordNum(s);
-
-      particles[0].copyToHost();
-      particles[1].copyToHost();
-
-      h5Helper.writeParticleData(recordNum);
-
-      centerOfMass(particles[dstIdx], comBuffer, N);
-
-#pragma acc update self(comBuffer[0])
-
-      float4 comFinal = {comBuffer[0].x, comBuffer[0].y, comBuffer[0].z, comBuffer[0].w};
-      h5Helper.writeCom(comFinal, recordNum);
-    }
-  }
-
-  const unsigned resIdx = steps % 2; // result particles index
-
-  /********************************************************************************************************************/
-  /*                          TODO: Invocation of center of mass kernel, do not forget to add                         */
-  /*                              additional synchronization and set appropriate stream                               */
-  /********************************************************************************************************************/
-
-  // final reduction
-  centerOfMass(particles[resIdx], comBuffer, N);
-
-  // End measurement
-  const auto end = std::chrono::steady_clock::now();
-
-  // Approximate simulation wall time
-  const float elapsedTime = std::chrono::duration<float>(end - start).count();
-  std::printf("Time: %f s\n", elapsedTime);
-#endif
 
 /********************************************************************************************************************/
 /*                                     TODO: Memory transfer GPU -> CPU                                             */

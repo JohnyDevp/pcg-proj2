@@ -137,13 +137,56 @@ void calculateVelocity(Particles &pIn, Particles &pOut, const unsigned N, float 
 } // end of calculate_gravitation_velocity
 //----------------------------------------------------------------------------------------------------------------------
 
+void centerOfMass(Particles &p, float4 *comBuffer, const unsigned N)
+{
+  const unsigned computeMassStream = 3;
+
+#pragma acc data present(comBuffer) copyin(p)
+  {
+// init combuffer with two particles combined into one position in comBuffer
+#pragma acc parallel loop async(computeMassStream)
+    for (unsigned i = 0; i < N / 2; i++)
+    {
+      // first load ith particle on the position i
+      comBuffer[i] = p.pos[i];
+
+      const float4 b = p.pos[i + N / 2]; // second particle
+      float dW = (comBuffer[i].w + b.w) > 0.f ? (b.w / (comBuffer[i].w + b.w)) : 0.f;
+
+      comBuffer[i].x += (b.x - comBuffer[i].x) * dW;
+      comBuffer[i].y += (b.y - comBuffer[i].y) * dW;
+      comBuffer[i].z += (b.z - comBuffer[i].z) * dW;
+      comBuffer[i].w += b.w;
+    }
+
+    // Step 2: Reduction in halves (right to left)
+    for (unsigned stride = N / 4; stride > 0; stride /= 2)
+    {
+#pragma acc parallel loop async(computeMassStream)
+      for (unsigned i = 0; i < stride; i++)
+      {
+        if (i + stride >= N)
+          continue;
+
+        const float4 b = comBuffer[i + stride]; // Combine right half into left half
+        float dW = (comBuffer[i].w + b.w) > 0.f ? (b.w / (comBuffer[i].w + b.w)) : 0.f;
+
+        comBuffer[i].x += (b.x - comBuffer[i].x) * dW;
+        comBuffer[i].y += (b.y - comBuffer[i].y) * dW;
+        comBuffer[i].z += (b.z - comBuffer[i].z) * dW;
+        comBuffer[i].w += b.w;
+      }
+    }
+  } // End of data region
+}
+
 /**
  * Calculate particles center of mass
  * @param p         - particles
  * @param comBuffer - pointer to a center of mass buffer
  * @param N         - Number of particles
  */
-void centerOfMass(Particles &p, float4 *comBuffer, const unsigned N)
+void centerOfMass__(Particles &p, float4 *comBuffer, const unsigned N)
 {
   /********************************************************************************************************************/
   /*                 TODO: Calculate partiles center of mass inside center of mass buffer                             */
