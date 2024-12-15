@@ -94,7 +94,7 @@ int main(int argc, char **argv)
   /*                   TODO: Allocate memory for center of mass buffer. Remember to clear it.                         */
   /********************************************************************************************************************/
 
-  unsigned blocks = N;
+  unsigned blocks = N / 2;
   float4 *comBuffer = (float4 *)malloc(blocks * sizeof(float4));
   for (unsigned i = 0u; i < blocks; ++i)
   {
@@ -105,9 +105,9 @@ int main(int argc, char **argv)
   /********************************************************************************************************************/
   /*                                      TODO: Set openacc stream ids                                                */
   /********************************************************************************************************************/
-const unsigned computeVelocityStream = 1;
-const unsigned transferStream = 2;
-const unsigned computeMassStream = 3;
+  const unsigned computeVelocityStream = 1;
+  const unsigned transferStream = 2;
+  const unsigned computeMassStream = 3;
   /********************************************************************************************************************/
   /*                                     TODO: Memory transfer CPU -> GPU                                             */
   /********************************************************************************************************************/
@@ -179,12 +179,12 @@ const unsigned computeMassStream = 3;
   }
   const unsigned resIdx = steps % 2; // result particles index
 
-/********************************************************************************************************************/
-/*                          TODO: Invocation of center of mass kernel, do not forget to add                         */
-/*                              additional synchronization and set appropriate stream                               */
-/********************************************************************************************************************/
+  /********************************************************************************************************************/
+  /*                          TODO: Invocation of center of mass kernel, do not forget to add                         */
+  /*                              additional synchronization and set appropriate stream                               */
+  /********************************************************************************************************************/
 
-// final reduction
+  // final reduction
 
   centerOfMass(particles[resIdx], comBuffer, N);
 #pragma acc wait(computeMassStream)

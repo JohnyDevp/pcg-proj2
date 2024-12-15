@@ -93,7 +93,13 @@ int main(int argc, char **argv)
   /********************************************************************************************************************/
   /*                   TODO: Allocate memory for center of mass buffer. Remember to clear it.                         */
   /********************************************************************************************************************/
-  float4 *comBuffer = new float4{0.0f, 0.0f, 0.0f, 0.0f};
+  unsigned blocks = N / 2;
+  float4 *comBuffer = (float4 *)malloc(blocks * sizeof(float4));
+  for (unsigned i = 0u; i < blocks; ++i)
+  {
+    comBuffer[i] = {0.0f, 0.0f, 0.0f, 0.0f};
+  }
+#pragma acc enter data copyin(comBuffer[0 : blocks])
 
   /********************************************************************************************************************/
   /*                                     TODO: Memory transfer CPU -> GPU                                             */
@@ -140,8 +146,8 @@ int main(int argc, char **argv)
   /********************************************************************************************************************/
   /*                                     TODO: Memory transfer GPU -> CPU                                             */
   /********************************************************************************************************************/
-
-  const float4 comFinal = {comBuffer->x, comBuffer->y, comBuffer->z, comBuffer->w};
+#pragma acc update self(comBuffer[0])
+  float4 comFinal = {comBuffer[0].x, comBuffer[0].y, comBuffer[0].z, comBuffer[0].w};
 
   particles[0].copyToHost();
   particles[1].copyToHost();

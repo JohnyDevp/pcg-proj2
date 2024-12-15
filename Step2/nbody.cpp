@@ -83,47 +83,57 @@ void calculateVelocity(Particles &pIn, Particles &pOut, const unsigned N, float 
 /*                    TODO: Calculate gravitation velocity, see reference CPU version,                             */
 /*                            you can use overloaded operators defined in Vec.h                                    */
 /*******************************************************************************************************************/
-#pragma acc parallel loop present(pIn, pOut)
+#pragma acc parallel loop present(pIn, pOut) gang vector collapse(1)
   for (unsigned i = 0u; i < N; ++i)
   {
-    float3 newVel = {0, 0, 0};
+    float3 newVel_first = {0, 0, 0};
+    float3 newVel_second = {0, 0, 0};
 
     const float4 currentPos = pIn.pos[i];
     const float3 currentVel = pIn.vel[i];
 
+#pragma acc loop
     for (unsigned j = 0u; j < N; ++j)
     {
       const float4 otherPos = pIn.pos[j];
       const float3 otherVel = pIn.vel[j];
 
       const float4 d = otherPos - currentPos;
-      float r = d.abs();
+      const float r2 = d.x * d.x + d.y * d.y + d.z * d.z;
+      const float r = std::sqrt(r2);
 
+      const float f = G * currentPos.w * otherPos.w / r2 + std::numeric_limits<float>::min();
+
+      const float r_w_min = r + std::numeric_limits<float>::min();
       // calculate gravitational force
-      const float fr = (G * dt * otherPos.w) / (r * r * r + std::numeric_limits<float>::min());
-      newVel.x += (r > COLLISION_DISTANCE) ? (d.x * fr) : 0.f;
-      newVel.y += (r > COLLISION_DISTANCE) ? (d.y * fr) : 0.f;
-      newVel.z += (r > COLLISION_DISTANCE) ? (d.z * fr) : 0.f;
+      newVel_first.x += (r_w_min > COLLISION_DISTANCE) ? d.x / r_w_min * f : 0.f;
+      newVel_first.y += (r_w_min > COLLISION_DISTANCE) ? d.y / r_w_min * f : 0.f;
+      newVel_first.z += (r_w_min > COLLISION_DISTANCE) ? d.z / r_w_min * f : 0.f;
 
       // calculate collision force
-      newVel.x += (r > 0.f && r < COLLISION_DISTANCE)
-                      ? ((((currentPos.w - otherPos.w) * currentVel.x + 2.f * otherPos.w * otherVel.x) / (currentPos.w + otherPos.w)) - currentVel.x)
-                      : 0.f;
-      newVel.y += (r > 0.f && r < COLLISION_DISTANCE)
-                      ? ((((currentPos.w - otherPos.w) * currentVel.y + 2.f * otherPos.w * otherVel.y) / (currentPos.w + otherPos.w)) - currentVel.y)
-                      : 0.f;
-      newVel.z += (r > 0.f && r < COLLISION_DISTANCE)
-                      ? ((((currentPos.w - otherPos.w) * currentVel.z + 2.f * otherPos.w * otherVel.z) / (currentPos.w + otherPos.w)) - currentVel.z)
-                      : 0.f;
+      newVel_second.x += (r > 0.f && r < COLLISION_DISTANCE)
+                             ? ((((currentPos.w - otherPos.w) * currentVel.x + 2.f * otherPos.w * otherVel.x) / (currentPos.w + otherPos.w)) - currentVel.x)
+                             : 0.f;
+      newVel_second.y += (r > 0.f && r < COLLISION_DISTANCE)
+                             ? ((((currentPos.w - otherPos.w) * currentVel.y + 2.f * otherPos.w * otherVel.y) / (currentPos.w + otherPos.w)) - currentVel.y)
+                             : 0.f;
+      newVel_second.z += (r > 0.f && r < COLLISION_DISTANCE)
+                             ? ((((currentPos.w - otherPos.w) * currentVel.z + 2.f * otherPos.w * otherVel.z) / (currentPos.w + otherPos.w)) - currentVel.z)
+                             : 0.f;
     }
 
-    pOut.vel[i] = pIn.vel[i] + newVel;
+    newVel_first.x *= dt / currentPos.w;
+    newVel_first.y *= dt / currentPos.w;
+    newVel_first.z *= dt / currentPos.w;
+
+    const float3 finvel = newVel_first + newVel_second;
+
+    pOut.vel[i] = pIn.vel[i] + finvel;
 
     pOut.pos[i].x = pIn.pos[i].x + pOut.vel[i].x * dt;
     pOut.pos[i].y = pIn.pos[i].y + pOut.vel[i].y * dt;
     pOut.pos[i].z = pIn.pos[i].z + pOut.vel[i].z * dt;
   }
-
 } // end of calculate_gravitation_velocity
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -135,76 +145,45 @@ void calculateVelocity(Particles &pIn, Particles &pOut, const unsigned N, float 
  */
 void centerOfMass(Particles &p, float4 *comBuffer, const unsigned N)
 {
-  /********************************************************************************************************************/
-  /*                 TODO: Calculate partiles center of mass inside center of mass buffer                             */
-  /********************************************************************************************************************/
-    // Separate reduction variables for each component
-    float comX = 0.0f;
-    float comY = 0.0f;
-    float comZ = 0.0f;
-    float comW = 0.0f;
 
-    // Parallel loop with separate reductions for each component
-    // #pragma acc parallel loop firstprivate(comX,comY,comZ,comW) present(p) reduction(+:comX, comY, comZ, comW) present(p)
-    #pragma acc kernels
-    for (unsigned i = 0; i < N; i++) {
-        const float4 b = p.pos[i]; // Access the float4 position
-        float dW = (comW + b.w) > 0.f ? (b.w / (comW + b.w)) : 0.f;
+#pragma acc data present(comBuffer) copyin(p)
+  {
+// init combuffer with two particles combined into one position in comBuffer
+#pragma acc parallel loop
+    for (unsigned i = 0; i < N / 2; i++)
+    {
+      // first load ith particle on the position i
+      comBuffer[i] = p.pos[i];
 
-        comX += (b.x - comX) * dW;
-        comY += (b.y - comY) * dW;
-        comZ += (b.z - comZ) * dW;
-        comW += b.w;
+      const float4 b = p.pos[i + N / 2]; // second particle
+      float dW = (comBuffer[i].w + b.w) > 0.f ? (b.w / (comBuffer[i].w + b.w)) : 0.f;
+
+      comBuffer[i].x += (b.x - comBuffer[i].x) * dW;
+      comBuffer[i].y += (b.y - comBuffer[i].y) * dW;
+      comBuffer[i].z += (b.z - comBuffer[i].z) * dW;
+      comBuffer[i].w += b.w;
     }
 
-    // Atomic updates to combine the local reductions into the global center of mass buffer
-    #pragma acc atomic update
-    comBuffer->x += comX;
+    // Step 2: Reduction in halves (right to left)
+    for (unsigned stride = N / 4; stride > 0; stride /= 2)
+    {
+#pragma acc parallel loop
+      for (unsigned i = 0; i < stride; i++)
+      {
+        if (i + stride >= N)
+          continue;
 
-    #pragma acc atomic update
-    comBuffer->y += comY;
+        const float4 b = comBuffer[i + stride]; // Combine right half into left half
+        float dW = (comBuffer[i].w + b.w) > 0.f ? (b.w / (comBuffer[i].w + b.w)) : 0.f;
 
-    #pragma acc atomic update
-    comBuffer->z += comZ;
-
-    #pragma acc atomic update
-    comBuffer->w += comW;
-
-// #pragma acc data present(p) copy(comBuffer)
-//   {
-//     // Declare local reduction variables for x, y, z, and w
-//     float x_sum = 0.0f, y_sum = 0.0f, z_sum = 0.0f, w_sum = 0.0f;
-
-//     // float4 localCom = {0.0f, 0.0f, 0.0f, 0.0f};
-
-//     // Parallel reduction for all particles
-// #pragma acc parallel loop reduction(+ : x_sum, y_sum, z_sum, w_sum)
-//     for (std::size_t i = 0; i < N; i++)
-//     {
-//       const float4 pos = {p.pos[i].x, p.pos[i].y, p.pos[i].z, p.pos[i].w};
-//       const float4 d = {pos.x - x_sum,
-//                         pos.y - y_sum,
-//                         pos.z - z_sum,
-//                         ((pos.w + w_sum) > 0.0f)
-//                             ? (pos.w / (pos.w + w_sum))
-//                             : 0.0f};
-//       x_sum += d.x * d.w;
-//       y_sum += d.y * d.w;
-//       z_sum += d.z * d.w;
-//       w_sum += pos.w;
-//     }
-
-// // Write back the reduced results to comBuffer (single-threaded section)
-// #pragma acc serial present(comBuffer)
-//     {
-//       comBuffer->x += x_sum;
-//       comBuffer->y += y_sum;
-//       comBuffer->z += z_sum;
-//       comBuffer->w += w_sum;
-//     }
-//   }
-
-} // end of centerOfMass
+        comBuffer[i].x += (b.x - comBuffer[i].x) * dW;
+        comBuffer[i].y += (b.y - comBuffer[i].y) * dW;
+        comBuffer[i].z += (b.z - comBuffer[i].z) * dW;
+        comBuffer[i].w += b.w;
+      }
+    }
+  } // End of data region
+}
 //----------------------------------------------------------------------------------------------------------------------
 
 /**

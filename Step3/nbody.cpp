@@ -83,7 +83,7 @@ void calculateVelocity(Particles &pIn, Particles &pOut, const unsigned N, float 
 /*                    TODO: Calculate gravitation velocity, see reference CPU version,                             */
 /*                            you can use overloaded operators defined in Vec.h                                    */
 /*******************************************************************************************************************/
-#pragma acc parallel loop present(pIn, pOut) async(1)
+#pragma acc parallel loop present(pIn, pOut) gang vector collapse(1)
   for (unsigned i = 0u; i < N; ++i)
   {
     float3 newVel_first = {0, 0, 0};
@@ -92,6 +92,7 @@ void calculateVelocity(Particles &pIn, Particles &pOut, const unsigned N, float 
     const float4 currentPos = pIn.pos[i];
     const float3 currentVel = pIn.vel[i];
 
+#pragma acc loop
     for (unsigned j = 0u; j < N; ++j)
     {
       const float4 otherPos = pIn.pos[j];
@@ -179,61 +180,6 @@ void centerOfMass(Particles &p, float4 *comBuffer, const unsigned N)
     }
   } // End of data region
 }
-
-/**
- * Calculate particles center of mass
- * @param p         - particles
- * @param comBuffer - pointer to a center of mass buffer
- * @param N         - Number of particles
- */
-void centerOfMass__(Particles &p, float4 *comBuffer, const unsigned N)
-{
-  /********************************************************************************************************************/
-  /*                 TODO: Calculate partiles center of mass inside center of mass buffer                             */
-  /********************************************************************************************************************/
-
-  const unsigned blocks = 32;
-  const unsigned computeMassStream = 3;
-
-// Parallel loop with separate reductions for each component
-#pragma acc parallel loop present(comBuffer) copyin(p) async(computeMassStream)
-  for (unsigned i = 0; i < blocks; i++)
-  {
-    // clear the buffer on the GPU
-    comBuffer[i] = {0.0f, 0.0f, 0.0f, 0.0f};
-
-    const int elementsPerBlock = (N / blocks) + 1;
-    const int startIdx = elementsPerBlock * i;
-
-#pragma acc loop seq
-    for (unsigned j = startIdx; j - startIdx < elementsPerBlock; j++)
-    {
-      if (j >= N)
-        continue;
-
-      const float4 b = p.pos[j]; // Access the float4 position
-      float dW = (comBuffer[i].w + b.w) > 0.f ? (b.w / (comBuffer[i].w + b.w)) : 0.f;
-
-      comBuffer[i].x += (b.x - comBuffer[i].x) * dW;
-      comBuffer[i].y += (b.y - comBuffer[i].y) * dW;
-      comBuffer[i].z += (b.z - comBuffer[i].z) * dW;
-      comBuffer[i].w += b.w;
-    }
-  }
-  // final reduction
-
-#pragma acc parallel loop seq async(computeMassStream)
-  for (unsigned i = 1; i < blocks; i++)
-  {
-    const float4 b = comBuffer[i]; // Access the float4 position
-    float dW = (comBuffer[0].w + b.w) > 0.f ? (b.w / (comBuffer[0].w + b.w)) : 0.f;
-
-    comBuffer[0].x += (b.x - comBuffer[0].x) * dW;
-    comBuffer[0].y += (b.y - comBuffer[0].y) * dW;
-    comBuffer[0].z += (b.z - comBuffer[0].z) * dW;
-    comBuffer[0].w += b.w;
-  }
-} // end of centerOfMass
 //----------------------------------------------------------------------------------------------------------------------
 
 /**

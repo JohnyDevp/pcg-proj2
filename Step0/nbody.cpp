@@ -120,13 +120,14 @@ void calculateGravitationVelocity(Particles &p, Velocities &tmpVel, const unsign
 /*                    TODO: Calculate gravitation velocity, see reference CPU version,                             */
 /*                            you can use overloaded operators defined in Vec.h                                    */
 /*******************************************************************************************************************/
-#pragma acc parallel loop present(p, tmpVel)
+#pragma acc parallel loop present(p, tmpVel) 
   for (unsigned i = 0u; i < N; ++i)
   {
     float3 newVel = {0, 0, 0};
 
     const float4 currentPos = p.pos[i];
 
+#pragma acc loop 
     for (unsigned j = 0u; j < N; ++j)
     {
       const float4 otherPos = p.pos[j];
@@ -167,6 +168,7 @@ void calculateCollisionVelocity(Particles &p, Velocities &tmpVel, const unsigned
     float4 currentPos = p.pos[i];
     float3 currentVel = p.vel[i];
 
+#pragma acc loop
     for (unsigned j = 0u; j < N; ++j)
     {
       const float4 otherPos = p.pos[j];
@@ -204,7 +206,7 @@ void updateParticles(Particles &p, Velocities &tmpVel, const unsigned N, float d
 /*                    TODO: Update particles position and velocity, see reference CPU version,                     */
 /*                            you can use overloaded operators defined in Vec.h                                    */
 /*******************************************************************************************************************/
-#pragma acc parallel loop present(p, tmpVel)
+#pragma acc parallel loop present(p, tmpVel) gang vector_length(128)
   for (unsigned i = 0u; i < N; ++i)
   {
     p.vel[i] += tmpVel.vel[i];

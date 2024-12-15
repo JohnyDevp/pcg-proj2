@@ -36,13 +36,25 @@ if(ACC_TARGET MATCHES "gpu")
   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -gpu=ccall,fastmath,pinned")
 endif()
 
-find_package(NVHPC REQUIRED COMPONENTS HOSTUTILS)
-link_directories(NVHPC::HOSTUTILS)
+# Get nvhpc toolkit path
+cmake_path(GET CMAKE_CXX_COMPILER PARENT_PATH NVHPC_COMPILERS_BIN_PATH)
+cmake_path(GET NVHPC_COMPILERS_BIN_PATH PARENT_PATH NVHPC_COMPILERS_PATH)
+cmake_PATH(GET NVHPC_COMPILERS_PATH PARENT_PATH NVHPC_ROOT_DIR)
 
+# Find nvhpc package
+find_package(NVHPC REQUIRED COMPONENTS HOSTUTILS HINTS ${NVHPC_ROOT_DIR})
+
+# link nvhpc hostutils to the targets
+link_libraries(NVHPC::HOSTUTILS)
+
+# Find HDF5
 find_package(HDF5 REQUIRED COMPONENTS C)
 
-include_directories(Commons)
+# link HDF5 to the targets
 link_libraries(HDF5::HDF5)
+
+# Include directories
+include_directories(Commons)
 
 # Gen
 add_executable(gen Commons/gen.cpp)
