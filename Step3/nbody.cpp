@@ -83,7 +83,7 @@ void calculateVelocity(Particles &pIn, Particles &pOut, const unsigned N, float 
 /*                    TODO: Calculate gravitation velocity, see reference CPU version,                             */
 /*                            you can use overloaded operators defined in Vec.h                                    */
 /*******************************************************************************************************************/
-#pragma acc parallel loop present(pIn, pOut)
+#pragma acc parallel loop present(pIn, pOut) async(1)
   for (unsigned i = 0u; i < N; ++i)
   {
     float3 newVel_first = {0, 0, 0};
@@ -150,9 +150,10 @@ void centerOfMass(Particles &p, float4 *comBuffer, const unsigned N)
   /********************************************************************************************************************/
 
   const unsigned blocks = 32;
+  const unsigned computeMassStream = 3;
 
 // Parallel loop with separate reductions for each component
-#pragma acc parallel loop present(p, comBuffer)
+#pragma acc parallel loop present(comBuffer) copyin(p) async(computeMassStream)
   for (unsigned i = 0; i < blocks; i++)
   {
     // clear the buffer on the GPU
@@ -177,7 +178,8 @@ void centerOfMass(Particles &p, float4 *comBuffer, const unsigned N)
     }
   }
   // final reduction
-#pragma acc parallel loop seq
+
+#pragma acc parallel loop seq async(computeMassStream)
   for (unsigned i = 1; i < blocks; i++)
   {
     const float4 b = comBuffer[i]; // Access the float4 position
@@ -188,88 +190,6 @@ void centerOfMass(Particles &p, float4 *comBuffer, const unsigned N)
     comBuffer[0].z += (b.z - comBuffer[0].z) * dW;
     comBuffer[0].w += b.w;
   }
-
-  //======================================================================================================================
-  //======================================================================================================================
-  //======================================================================================================================
-
-  //   const unsigned blocks = 8;
-  //   float4 myCom[blocks] = {0.0f, 0.0f, 0.0f, 0.0f};
-
-  // // Parallel loop with separate reductions for each component
-  // #pragma acc parallel loop present(p)
-  //   for (unsigned i = 0; i < blocks; i++)
-  //   {
-  //     const int elementsPerBlock = (N / blocks) + 1;
-  //     const int startIdx = elementsPerBlock * i;
-
-  // #pragma acc loop seq
-  //     for (unsigned j = startIdx; j - startIdx < elementsPerBlock; j++)
-  //     {
-  //       if (j >= N)
-  //         continue;
-
-  //       const float4 b = p.pos[j]; // Access the float4 position
-  //       float dW = (myCom[i].w + b.w) > 0.f ? (b.w / (myCom[i].w + b.w)) : 0.f;
-
-  //       myCom[i].x += (b.x - myCom[i].x) * dW;
-  //       myCom[i].y += (b.y - myCom[i].y) * dW;
-  //       myCom[i].z += (b.z - myCom[i].z) * dW;
-  //       myCom[i].w += b.w;
-  //     }
-  //   }
-
-  // // final reduction
-  // #pragma acc loop seq
-  //   for (unsigned i = 0; i < blocks; i++)
-  // {
-  //   const float4 b = myCom[i]; // Access the float4 position
-  //   // rewrite for comBuffer
-  //   float dW = (comBuffer->w + b.w) > 0.f ? (b.w / (comBuffer->w + b.w)) : 0.f;
-
-  //   comBuffer->x += (b.x - comBuffer->x) * dW;
-  //   comBuffer->y += (b.y - comBuffer->y) * dW;
-  //   comBuffer->z += (b.z - comBuffer->z) * dW;
-  //   comBuffer->w += b.w;
-  // }
-
-  //======================================================================================================================
-  //======================================================================================================================
-  //======================================================================================================================
-
-  // good .......................................................
-
-  // Separate reduction variables for each component
-  // float comX = 0.0f;
-  // float comY = 0.0f;
-  // float comZ = 0.0f;
-  // float comW = 0.0f;
-
-  // // Parallel loop with separate reductions for each component
-  // #pragma acc kernels present(p)// parallel loop reduction(+ : comX, comY, comZ, comW) present(p)
-  // for (unsigned i = 0; i < N; i++)
-  // {
-  //   const float4 b = p.pos[i]; // Access the float4 position
-  //   float dW = (comW + b.w) > 0.f ? (b.w / (comW + b.w)) : 0.f;
-
-  //   comX += (b.x - comX) * dW;
-  //   comY += (b.y - comY) * dW;
-  //   comZ += (b.z - comZ) * dW;
-  //   comW += b.w;
-  // }
-
-  // // Atomic updates to combine the local reductions into the global center of mass buffer
-  // #pragma acc atomic update
-  // comBuffer->x += comX;
-
-  // #pragma acc atomic update
-  // comBuffer->y += comY;
-
-  // #pragma acc atomic update
-  // comBuffer->z += comZ;
-
-  // #pragma acc atomic update
-  // comBuffer->w += comW;
 } // end of centerOfMass
 //----------------------------------------------------------------------------------------------------------------------
 
