@@ -93,22 +93,15 @@ int main(int argc, char **argv)
   /********************************************************************************************************************/
   /*                   TODO: Allocate memory for center of mass buffer. Remember to clear it.                         */
   /********************************************************************************************************************/
-  // float4 *comBuffer = new float4{0.0f, 0.0f, 0.0f, 0.0f};
-  float4 *comBuffer = (float4 *)malloc(8 * sizeof(float4));
-  for (unsigned i = 0u; i < 8; ++i)
+
+  unsigned blocks = 32;
+  float4 *comBuffer = (float4 *)malloc(blocks * sizeof(float4));
+  for (unsigned i = 0u; i < blocks; ++i)
   {
     comBuffer[i] = {0.0f, 0.0f, 0.0f, 0.0f};
   }
-#pragma acc enter data copyin(comBuffer[0 : 8])
+#pragma acc enter data copyin(comBuffer[0 : blocks])
 
-  // #pragma acc parallel loop present(comBuffer)
-  // for (unsigned i = 0u; i < 1; ++i)
-  // {
-  //   printf("comBuffer[%d] = %f, %f, %f, %f\n", i, comBuffer[i].x, comBuffer[i].y, comBuffer[i].z, comBuffer[i].w);
-  //   comBuffer->x = 200.0f;
-  // }
-  // #pragma acc update self(comBuffer[0:1])
-  // printf("comBuffer[0] = %f, %f, %f, %f\n", comBuffer[0].x, comBuffer[0].y, comBuffer[0].z, comBuffer[0].w);
   /********************************************************************************************************************/
   /*                                      TODO: Set openacc stream ids                                                */
   /********************************************************************************************************************/
@@ -158,15 +151,28 @@ int main(int argc, char **argv)
 
     if (shouldWrite(s))
     {
-      // auto recordNum = getRecordNum(s);
+      auto recordNum = getRecordNum(s);
 
-      // h5Helper.writeParticleData(recordNum);
+      h5Helper.writeParticleData(recordNum);
 
-      // centerOfMass(particles[dstIdx], comBuffer, N);
+      centerOfMass(particles[dstIdx], comBuffer, N);
+      // do the final part of reduction from the local parts
+      // final reduction
+      float4 comFinal = {0.0f, 0.0f, 0.0f, 0.0f};
+#pragma acc data update host(comBuffer[0 : blocks])
+      for (unsigned i = 0; i < blocks; i++)
+      {
+        const float4 b = comBuffer[i]; // Access the float4 position
+        // rewrite for comBuffer
+        float dW = (comFinal.w + b.w) > 0.f ? (b.w / (comFinal.w + b.w)) : 0.f;
 
-      // h5Helper.writeCom(*comBuffer, recordNum);
+        comFinal.x += (b.x - comFinal.x) * dW;
+        comFinal.y += (b.y - comFinal.y) * dW;
+        comFinal.z += (b.z - comFinal.z) * dW;
+        comFinal.w += b.w;
+      }
 
-      // *comBuffer = {0.0f, 0.0f, 0.0f, 0.0f};
+      h5Helper.writeCom(comFinal, recordNum);
     }
   }
 
@@ -177,7 +183,22 @@ int main(int argc, char **argv)
   /*                              additional synchronization and set appropriate stream                               */
   /********************************************************************************************************************/
 
+  // final reduction
   centerOfMass(particles[resIdx], comBuffer, N);
+  // do the final part of reduction from the local parts
+  float4 comFinal = {0.0f, 0.0f, 0.0f, 0.0f};
+#pragma acc data update host(comBuffer[0 : blocks])
+  for (unsigned i = 0; i < blocks; i++)
+  {
+    const float4 b = comBuffer[i]; // Access the float4 position
+    // rewrite for comBuffer
+    float dW = (comFinal.w + b.w) > 0.f ? (b.w / (comFinal.w + b.w)) : 0.f;
+
+    comFinal.x += (b.x - comFinal.x) * dW;
+    comFinal.y += (b.y - comFinal.y) * dW;
+    comFinal.z += (b.z - comFinal.z) * dW;
+    comFinal.w += b.w;
+  }
 
   // End measurement
   const auto end = std::chrono::steady_clock::now();
@@ -186,11 +207,9 @@ int main(int argc, char **argv)
   const float elapsedTime = std::chrono::duration<float>(end - start).count();
   std::printf("Time: %f s\n", elapsedTime);
 
-/********************************************************************************************************************/
-/*                                     TODO: Memory transfer GPU -> CPU                                             */
-/********************************************************************************************************************/
-#pragma acc data update self(comBuffer[0 : 8])
-  const float4 comFinal = {comBuffer->x, comBuffer->y, comBuffer->z, comBuffer->w};
+  /********************************************************************************************************************/
+  /*                                     TODO: Memory transfer GPU -> CPU                                             */
+  /********************************************************************************************************************/
 
   particles[0].copyToHost();
   particles[1].copyToHost();
@@ -225,9 +244,10 @@ int main(int argc, char **argv)
   h5Helper.writeComFinal(comFinal);
   h5Helper.writeParticleDataFinal();
 
-  /********************************************************************************************************************/
-  /*                                TODO: Free center of mass buffer memory                                           */
-  /********************************************************************************************************************/
-
+/********************************************************************************************************************/
+/*                                TODO: Free center of mass buffer memory                                           */
+/********************************************************************************************************************/
+#pragma acc exit data delete (comBuffer[0 : blocks])
+  free(comBuffer);
 } // end of main
 //----------------------------------------------------------------------------------------------------------------------

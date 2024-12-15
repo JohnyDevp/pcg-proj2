@@ -148,13 +148,16 @@ void centerOfMass(Particles &p, float4 *comBuffer, const unsigned N)
   /********************************************************************************************************************/
   /*                 TODO: Calculate partiles center of mass inside center of mass buffer                             */
   /********************************************************************************************************************/
-  const unsigned blocks = 8;
-  float4 myCom[blocks] = {0.0f, 0.0f, 0.0f, 0.0f};
+
+  const unsigned blocks = 32;
 
 // Parallel loop with separate reductions for each component
-#pragma acc parallel loop present(p)
+#pragma acc parallel loop present(p, comBuffer)
   for (unsigned i = 0; i < blocks; i++)
   {
+    // clear the buffer on the GPU
+    comBuffer[i] = {0.0f, 0.0f, 0.0f, 0.0f};
+
     const int elementsPerBlock = (N / blocks) + 1;
     const int startIdx = elementsPerBlock * i;
 
@@ -165,28 +168,64 @@ void centerOfMass(Particles &p, float4 *comBuffer, const unsigned N)
         continue;
 
       const float4 b = p.pos[j]; // Access the float4 position
-      float dW = (myCom[i].w + b.w) > 0.f ? (b.w / (myCom[i].w + b.w)) : 0.f;
+      float dW = (comBuffer[i].w + b.w) > 0.f ? (b.w / (comBuffer[i].w + b.w)) : 0.f;
 
-      myCom[i].x += (b.x - myCom[i].x) * dW;
-      myCom[i].y += (b.y - myCom[i].y) * dW;
-      myCom[i].z += (b.z - myCom[i].z) * dW;
-      myCom[i].w += b.w;
+      comBuffer[i].x += (b.x - comBuffer[i].x) * dW;
+      comBuffer[i].y += (b.y - comBuffer[i].y) * dW;
+      comBuffer[i].z += (b.z - comBuffer[i].z) * dW;
+      comBuffer[i].w += b.w;
     }
   }
 
-// final reduction
-#pragma acc loop seq
-  for (unsigned i = 0; i < blocks; i++)
-  {
-    const float4 b = myCom[i]; // Access the float4 position
-    // rewrite for comBuffer
-    float dW = (comBuffer->w + b.w) > 0.f ? (b.w / (comBuffer->w + b.w)) : 0.f;
+#pragma acc update host(comBuffer[0 : blocks])
 
-    comBuffer->x += (b.x - comBuffer->x) * dW;
-    comBuffer->y += (b.y - comBuffer->y) * dW;
-    comBuffer->z += (b.z - comBuffer->z) * dW;
-    comBuffer->w += b.w;
-  }
+  //======================================================================================================================
+  //======================================================================================================================
+  //======================================================================================================================
+
+  //   const unsigned blocks = 8;
+  //   float4 myCom[blocks] = {0.0f, 0.0f, 0.0f, 0.0f};
+
+  // // Parallel loop with separate reductions for each component
+  // #pragma acc parallel loop present(p)
+  //   for (unsigned i = 0; i < blocks; i++)
+  //   {
+  //     const int elementsPerBlock = (N / blocks) + 1;
+  //     const int startIdx = elementsPerBlock * i;
+
+  // #pragma acc loop seq
+  //     for (unsigned j = startIdx; j - startIdx < elementsPerBlock; j++)
+  //     {
+  //       if (j >= N)
+  //         continue;
+
+  //       const float4 b = p.pos[j]; // Access the float4 position
+  //       float dW = (myCom[i].w + b.w) > 0.f ? (b.w / (myCom[i].w + b.w)) : 0.f;
+
+  //       myCom[i].x += (b.x - myCom[i].x) * dW;
+  //       myCom[i].y += (b.y - myCom[i].y) * dW;
+  //       myCom[i].z += (b.z - myCom[i].z) * dW;
+  //       myCom[i].w += b.w;
+  //     }
+  //   }
+
+  // // final reduction
+  // #pragma acc loop seq
+  //   for (unsigned i = 0; i < blocks; i++)
+  // {
+  //   const float4 b = myCom[i]; // Access the float4 position
+  //   // rewrite for comBuffer
+  //   float dW = (comBuffer->w + b.w) > 0.f ? (b.w / (comBuffer->w + b.w)) : 0.f;
+
+  //   comBuffer->x += (b.x - comBuffer->x) * dW;
+  //   comBuffer->y += (b.y - comBuffer->y) * dW;
+  //   comBuffer->z += (b.z - comBuffer->z) * dW;
+  //   comBuffer->w += b.w;
+  // }
+
+  //======================================================================================================================
+  //======================================================================================================================
+  //======================================================================================================================
 
   // good .......................................................
 
